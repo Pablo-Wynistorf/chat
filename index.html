@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bedrock Chat</title>
+<title>AI Chat</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{bg:'#0c0c0e',surface:{DEFAULT:'#131316',2:'#1a1a1f',3:'#222228',4:'#2a2a32'},border:{DEFAULT:'#27272f',light:'#32323c'},accent:{DEFAULT:'#7c5cfc',hover:'#8b6ffd'}}}}}</script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -51,11 +51,11 @@
 
 <!-- Sidebar -->
 <aside id="sidebar" class="w-[260px] bg-surface border-r border-border flex flex-col flex-shrink-0 h-full fixed sm:relative z-20 -translate-x-full sm:translate-x-0 transition-transform">
-  <div class="p-4 flex items-center gap-2.5">
+  <div class="p-4 flex items-center justify-center gap-2.5">
     <div class="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center flex-shrink-0">
       <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
     </div>
-    <span class="text-[15px] font-semibold tracking-tight">Bedrock Chat</span>
+    <span class="text-[15px] font-semibold tracking-tight">AI Chat</span>
   </div>
   <div class="px-3 pb-2">
     <button onclick="newChat()" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-accent/10 text-accent hover:bg-accent/15 transition text-sm font-medium">
