@@ -7,8 +7,10 @@
 <script src="https://cdn.tailwindcss.com"></script>
 <script>tailwind.config={darkMode:'class',theme:{extend:{colors:{bg:'#0c0c0e',surface:{DEFAULT:'#131316',2:'#1a1a1f',3:'#222228',4:'#2a2a32'},border:{DEFAULT:'#27272f',light:'#32323c'},accent:{DEFAULT:'#7c5cfc',hover:'#8b6ffd'}}}}}</script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https:; img-src 'self' data: blob:;">
 <style>
   @keyframes blink{50%{opacity:0}}.cursor-blink{animation:blink 1s step-end infinite}
   @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.fade-in{animation:fadein .15s ease}
@@ -285,7 +287,7 @@ function renderChatList(){
 
 // ── Rendering ──
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function renderMarkdown(text){const html=marked.parse(text),w=document.createElement('div');w.innerHTML=html;w.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'),lang=code?.className?.match(/language-(\w+)/)?.[1]||'',hdr=document.createElement('div');hdr.className='code-header';hdr.innerHTML=`<span>${lang||'code'}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button>`;pre.insertBefore(hdr,pre.firstChild);});return w.innerHTML;}
+function renderMarkdown(text){const raw=marked.parse(text),clean=DOMPurify.sanitize(raw,{ADD_ATTR:['class','target'],ALLOW_DATA_ATTR:false}),w=document.createElement('div');w.innerHTML=clean;w.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'),lang=code?.className?.match(/language-(\w+)/)?.[1]||'',hdr=document.createElement('div');hdr.className='code-header';hdr.innerHTML=`<span>${lang||'code'}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button>`;pre.insertBefore(hdr,pre.firstChild);});return w.innerHTML;}
 function copyCode(btn){navigator.clipboard.writeText(btn.closest('pre').querySelector('code').textContent);btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500);}
 
 function renderMessages(){
@@ -334,9 +336,11 @@ function stopStreaming(){if(abortController){abortController.abort();abortContro
 async function send(){
   const text=inputEl.value.trim();if(!text&&!pendingFiles.length)return;
   const{endpoint,apiKey,system}=getCfg();if(!endpoint||!apiKey){toggleSettings();return;}
+  if(endpoint&&!endpoint.startsWith('https://')){alert('Please use an HTTPS endpoint for security.');toggleSettings();return;}
   if(!getChat())newChat();const chat=getChat();
   if(chat.messages.length===0&&system)chat.messages.push({role:'system',content:system});
-  let userContent=text;const msgFiles=[...pendingFiles];
+  let userContent=text;const msgFiles=[...pendingFiles];const MAX_INPUT_LENGTH=100000;
+  if(userContent.length>MAX_INPUT_LENGTH){alert(`Message too long (${userContent.length} chars). Max is ${MAX_INPUT_LENGTH}.`);return;}
   if(msgFiles.length){const tp=msgFiles.filter(f=>f.type==='text').map(f=>`--- ${f.name} ---\n${f.content}\n--- end ---`);const ip=msgFiles.filter(f=>f.type==='image').map(f=>`[Image: ${f.name}]`);userContent=[...ip,...tp,text].filter(Boolean).join('\n\n');}
   chat.messages.push({role:'user',content:userContent,files:msgFiles.length?msgFiles:undefined});
   if(chat.messages.filter(m=>m.role==='user').length===1)chat.title=(text||msgFiles[0]?.name||'New chat').slice(0,50);
