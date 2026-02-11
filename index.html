@@ -317,7 +317,18 @@ document.addEventListener('dragover',e=>e.preventDefault());
 document.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files.length)handleFiles(e.dataTransfer.files);});
 
 // ── Chats ──
-function saveChats(){localStorage.setItem('chats',JSON.stringify(chats));localStorage.setItem('activeChatId',activeChatId);}
+function saveChats(){
+  // Strip heavy data (base64 images, file contents) before persisting to avoid localStorage quota
+  const lite=chats.map(c=>({...c,messages:c.messages.map(m=>{
+    const clean={role:m.role,content:m.content};
+    // Keep file metadata (name/type) but drop the actual content for display reference
+    if(m.files)clean.files=m.files.map(f=>({name:f.name,type:f.type}));
+    // Don't persist .images (base64 data) — too large for localStorage
+    return clean;
+  })}));
+  try{localStorage.setItem('chats',JSON.stringify(lite));}catch(e){console.warn('localStorage full, skipping save',e);}
+  localStorage.setItem('activeChatId',activeChatId);
+}
 function getChat(){return chats.find(c=>c.id===activeChatId)||null;}
 function pushChatUrl(id){if(id)history.pushState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
 function replaceChatUrl(id){if(id)history.replaceState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
