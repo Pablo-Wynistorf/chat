@@ -50,6 +50,10 @@
 </style>
 </head>
 <body class="h-full bg-bg text-zinc-200 flex overflow-hidden">
+<script>
+  // SPA redirect: restore path saved by 404.html
+  (function(){var r=sessionStorage.getItem('redirect');if(r){sessionStorage.removeItem('redirect');history.replaceState(null,'',r);}})();
+</script>
 
 <!-- Mobile sidebar toggle -->
 <button id="sidebar-toggle" onclick="toggleSidebar()" class="fixed top-3 left-3 z-30 w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-zinc-400 hover:text-zinc-200 sm:hidden transition">
