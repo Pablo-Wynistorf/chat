@@ -10,7 +10,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github-dark-dimmed.min.css">
 <script src="https://cdn.jsdelivr.net/npm/highlight.js@11/highlight.min.js"></script>
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https:; img-src 'self' data: blob:;">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css">
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js"></script>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' https:; img-src 'self' data: blob:; font-src https://cdn.jsdelivr.net;">
 <style>
   @keyframes blink{50%{opacity:0}}.cursor-blink{animation:blink 1s step-end infinite}
   @keyframes fadein{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}.fade-in{animation:fadein .15s ease}
@@ -369,7 +371,40 @@ function renderChatList(){
 
 // ── Rendering ──
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function renderMarkdown(text){const raw=marked.parse(text),clean=DOMPurify.sanitize(raw,{ADD_ATTR:['class','target'],ALLOW_DATA_ATTR:false}),w=document.createElement('div');w.innerHTML=clean;w.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'),lang=code?.className?.match(/language-(\w+)/)?.[1]||'',hdr=document.createElement('div');hdr.className='code-header';hdr.innerHTML=`<span>${lang||'code'}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button>`;pre.insertBefore(hdr,pre.firstChild);});return w.innerHTML;}
+function renderLatex(html){
+  // Process block math: $$...$$ 
+  html=html.replace(/\$\$([\s\S]*?)\$\$/g,(m,tex)=>{try{return katex.renderToString(tex.trim(),{displayMode:true,throwOnError:false});}catch{return m;}});
+  // Process inline math: $...$  (but not $$)
+  html=html.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g,(m,tex)=>{try{return katex.renderToString(tex.trim(),{displayMode:false,throwOnError:false});}catch{return m;}});
+  // Process \[...\] block math
+  html=html.replace(/\\\[([\s\S]*?)\\\]/g,(m,tex)=>{try{return katex.renderToString(tex.trim(),{displayMode:true,throwOnError:false});}catch{return m;}});
+  // Process \(...\) inline math
+  html=html.replace(/\\\(([\s\S]*?)\\\)/g,(m,tex)=>{try{return katex.renderToString(tex.trim(),{displayMode:false,throwOnError:false});}catch{return m;}});
+  return html;
+}
+function renderMarkdown(text){
+  // Protect math blocks from markdown parser by replacing with placeholders
+  const mathBlocks=[];
+  let protected_=text;
+  // Protect $$...$$ blocks
+  protected_=protected_.replace(/\$\$([\s\S]*?)\$\$/g,(m)=>{mathBlocks.push(m);return `%%MATH${mathBlocks.length-1}%%`;});
+  // Protect \[...\] blocks
+  protected_=protected_.replace(/\\\[([\s\S]*?)\\\]/g,(m)=>{mathBlocks.push(m);return `%%MATH${mathBlocks.length-1}%%`;});
+  // Protect inline $...$ 
+  protected_=protected_.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g,(m)=>{mathBlocks.push(m);return `%%MATH${mathBlocks.length-1}%%`;});
+  // Protect \(...\)
+  protected_=protected_.replace(/\\\(([\s\S]*?)\\\)/g,(m)=>{mathBlocks.push(m);return `%%MATH${mathBlocks.length-1}%%`;});
+
+  const raw=marked.parse(protected_);
+  // Restore math placeholders
+  let restored=raw.replace(/%%MATH(\d+)%%/g,(m,i)=>mathBlocks[parseInt(i)]||m);
+  // Now render LaTeX
+  restored=renderLatex(restored);
+  const clean=DOMPurify.sanitize(restored,{ADD_ATTR:['class','target','aria-hidden','style'],ALLOW_DATA_ATTR:false,ADD_TAGS:['semantics','annotation','math','mrow','mi','mo','mn','msup','msub','mfrac','mover','munder','mspace','mtable','mtr','mtd','mtext','msqrt','mroot','menclose','mpadded','mphantom','mglyph','mlabeledtr','mmultiscripts','mprescripts','none']});
+  const w=document.createElement('div');w.innerHTML=clean;
+  w.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'),lang=code?.className?.match(/language-(\w+)/)?.[1]||'',hdr=document.createElement('div');hdr.className='code-header';hdr.innerHTML=`<span>${lang||'code'}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button>`;pre.insertBefore(hdr,pre.firstChild);});
+  return w.innerHTML;
+}
 function copyCode(btn){const pre=btn.closest('pre');const code=pre.querySelector('code');navigator.clipboard.writeText(code.textContent);btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500);}
 
 function renderMessages(){
@@ -385,19 +420,23 @@ function renderMessages(){
 
 function appendMessageEl(role,text,files,msgIdx){
   const el=$('#messages'),empty=el.querySelector('.flex.flex-col.items-center');if(empty)empty.remove();
-  const row=document.createElement('div');row.className=`message-row py-4 sm:py-5 fade-in ${role==='assistant'?'bg-surface/40':''}`;
-  const inner=document.createElement('div');inner.className='max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3';
-  const avatar=document.createElement('div');avatar.className=`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5 ${role==='user'?'bg-accent text-white':'bg-surface-3 text-zinc-400 border border-border'}`;avatar.textContent=role==='user'?'U':'AI';
-  const content=document.createElement('div');content.className='flex-1 min-w-0';
-  if(files?.length){const fd=document.createElement('div');fd.className='flex flex-wrap gap-2 mb-2';files.forEach(f=>{if(f.type==='image'){if(f.content){const img=document.createElement('img');img.src=f.content;img.className='max-w-[200px] max-h-36 rounded-xl border border-border';fd.appendChild(img);}else{const ph=document.createElement('span');ph.className='file-chip';ph.innerHTML='🖼 '+esc(f.name)+' <span class="text-zinc-600 text-[11px]">(image not stored)</span>';fd.appendChild(ph);}}else{const c=document.createElement('span');c.className='file-chip';c.textContent=`📄 ${f.name}`;fd.appendChild(c);}});content.appendChild(fd);}
+  const isUser=role==='user';
+  const row=document.createElement('div');row.className=`message-row py-3 sm:py-4 fade-in`;
+  const inner=document.createElement('div');inner.className=`max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3 ${isUser?'justify-end':'justify-start'}`;
+  const bubble=document.createElement('div');bubble.className=isUser?'max-w-[85%] sm:max-w-[70%]':'max-w-[85%] sm:max-w-[80%] flex gap-3';
+  const avatar=document.createElement('div');avatar.className=`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5 ${isUser?'bg-accent text-white':'bg-surface-3 text-zinc-400 border border-border'}`;avatar.textContent=isUser?'U':'AI';
+  const content=document.createElement('div');content.className='min-w-0';
+  if(isUser){content.className+=' bg-surface-3 rounded-2xl rounded-br-md px-4 py-2.5';}
+  if(files?.length){const fd=document.createElement('div');fd.className=`flex flex-wrap gap-2 mb-2 ${isUser?'justify-end':''}`;files.forEach(f=>{if(f.type==='image'){if(f.content){const img=document.createElement('img');img.src=f.content;img.className='max-w-[200px] max-h-36 rounded-xl border border-border';fd.appendChild(img);}else{const ph=document.createElement('span');ph.className='file-chip';ph.innerHTML='🖼 '+esc(f.name)+' <span class="text-zinc-600 text-[11px]">(image not stored)</span>';fd.appendChild(ph);}}else{const c=document.createElement('span');c.className='file-chip';c.textContent=`📄 ${f.name}`;fd.appendChild(c);}});content.appendChild(fd);}
   const textDiv=document.createElement('div');textDiv.className='text-[14px] leading-[1.7] break-words';
-  if(role==='assistant'){textDiv.className+=' md-content';textDiv.innerHTML=renderMarkdown(text);}else{textDiv.className+=' whitespace-pre-wrap text-zinc-300';textDiv.textContent=text;}
+  if(!isUser){textDiv.className+=' md-content';textDiv.innerHTML=renderMarkdown(text);}else{textDiv.className+=' whitespace-pre-wrap text-zinc-300';textDiv.textContent=text;}
   content.appendChild(textDiv);
-  if(msgIdx!==undefined&&!streaming){const actions=document.createElement('div');actions.className='msg-actions mt-1.5 flex gap-1';
-    if(role==='user')actions.innerHTML=`<button onclick="editMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">✎ Edit</button>`;
-    if(role==='assistant')actions.innerHTML=`<button onclick="copyMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">⎘ Copy</button><button onclick="regenerate(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">↻ Regenerate</button>`;
+  if(msgIdx!==undefined&&!streaming){const actions=document.createElement('div');actions.className=`msg-actions mt-1.5 flex gap-1 ${isUser?'justify-end':''}`;
+    if(isUser)actions.innerHTML=`<button onclick="editMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">✎ Edit</button>`;
+    if(!isUser)actions.innerHTML=`<button onclick="copyMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">⎘ Copy</button><button onclick="regenerate(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">↻ Regenerate</button>`;
     content.appendChild(actions);}
-  inner.appendChild(avatar);inner.appendChild(content);row.appendChild(inner);el.appendChild(row);
+  if(isUser){bubble.appendChild(content);}else{bubble.appendChild(avatar);bubble.appendChild(content);}
+  inner.appendChild(bubble);row.appendChild(inner);el.appendChild(row);
   if(autoScrollEnabled)el.scrollTop=el.scrollHeight;
   return textDiv;
 }
