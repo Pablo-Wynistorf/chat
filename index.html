@@ -51,8 +51,8 @@
 </head>
 <body class="h-full bg-bg text-zinc-200 flex overflow-hidden">
 <script>
-  // SPA redirect: restore path saved by 404.html
-  (function(){var r=sessionStorage.getItem('redirect');if(r){sessionStorage.removeItem('redirect');history.replaceState(null,'',r);}})();
+  // SPA redirect: restore path from ?p= query param set by 404.html
+  (function(){var q=new URLSearchParams(location.search).get('p');if(q){history.replaceState(null,'',q);}})();
 </script>
 
 <!-- Mobile sidebar toggle -->
