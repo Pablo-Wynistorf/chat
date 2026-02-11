@@ -318,15 +318,14 @@ document.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files.
 
 // ── Chats ──
 function saveChats(){
-  // Strip heavy data (base64 images, file contents) before persisting to avoid localStorage quota
+  // Strip ALL heavy data — only persist file names, never content/base64
   const lite=chats.map(c=>({...c,messages:c.messages.map(m=>{
     const clean={role:m.role,content:m.content};
-    // Keep file metadata (name/type) but drop the actual content for display reference
     if(m.files)clean.files=m.files.map(f=>({name:f.name,type:f.type}));
-    // Don't persist .images (base64 data) — too large for localStorage
+    // .images never persisted
     return clean;
   })}));
-  try{localStorage.setItem('chats',JSON.stringify(lite));}catch(e){console.warn('localStorage full, skipping save',e);}
+  try{localStorage.setItem('chats',JSON.stringify(lite));}catch(e){console.warn('localStorage quota exceeded',e);}
   localStorage.setItem('activeChatId',activeChatId);
 }
 function getChat(){return chats.find(c=>c.id===activeChatId)||null;}
@@ -390,7 +389,7 @@ function appendMessageEl(role,text,files,msgIdx){
   const inner=document.createElement('div');inner.className='max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3';
   const avatar=document.createElement('div');avatar.className=`w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold flex-shrink-0 mt-0.5 ${role==='user'?'bg-accent text-white':'bg-surface-3 text-zinc-400 border border-border'}`;avatar.textContent=role==='user'?'U':'AI';
   const content=document.createElement('div');content.className='flex-1 min-w-0';
-  if(files?.length){const fd=document.createElement('div');fd.className='flex flex-wrap gap-2 mb-2';files.forEach(f=>{if(f.type==='image'){const img=document.createElement('img');img.src=f.content;img.className='max-w-[200px] max-h-36 rounded-xl border border-border';fd.appendChild(img);}else{const c=document.createElement('span');c.className='file-chip';c.textContent=`📄 ${f.name}`;fd.appendChild(c);}});content.appendChild(fd);}
+  if(files?.length){const fd=document.createElement('div');fd.className='flex flex-wrap gap-2 mb-2';files.forEach(f=>{if(f.type==='image'){if(f.content){const img=document.createElement('img');img.src=f.content;img.className='max-w-[200px] max-h-36 rounded-xl border border-border';fd.appendChild(img);}else{const ph=document.createElement('span');ph.className='file-chip';ph.innerHTML='🖼 '+esc(f.name)+' <span class="text-zinc-600 text-[11px]">(image not stored)</span>';fd.appendChild(ph);}}else{const c=document.createElement('span');c.className='file-chip';c.textContent=`📄 ${f.name}`;fd.appendChild(c);}});content.appendChild(fd);}
   const textDiv=document.createElement('div');textDiv.className='text-[14px] leading-[1.7] break-words';
   if(role==='assistant'){textDiv.className+=' md-content';textDiv.innerHTML=renderMarkdown(text);}else{textDiv.className+=' whitespace-pre-wrap text-zinc-300';textDiv.textContent=text;}
   content.appendChild(textDiv);
