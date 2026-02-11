@@ -317,7 +317,7 @@ function saveChats(){localStorage.setItem('chats',JSON.stringify(chats));localSt
 function getChat(){return chats.find(c=>c.id===activeChatId)||null;}
 function pushChatUrl(id){if(id)history.pushState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
 function replaceChatUrl(id){if(id)history.replaceState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
-function newChat(){autoTitleChat(getChat());const c={id:crypto.randomUUID(),title:'New chat',messages:[],created:Date.now()};chats.unshift(c);activeChatId=c.id;saveChats();renderChatList();renderMessages();pushChatUrl(c.id);$('#input').focus();if(window.innerWidth<640)toggleSidebar();}
+function newChat(force){const cur=getChat();if(!force&&cur&&cur.messages.filter(m=>m.role!=='system').length===0){$('#input').focus();return;}autoTitleChat(cur);const c={id:crypto.randomUUID(),title:'New chat',messages:[],created:Date.now()};chats.unshift(c);activeChatId=c.id;saveChats();renderChatList();renderMessages();pushChatUrl(c.id);$('#input').focus();if(window.innerWidth<640)toggleSidebar();}
 function deleteChat(id,e){e.stopPropagation();pendingDeleteId=id;$('#delete-modal').classList.remove('hidden');$('#delete-backdrop').classList.remove('hidden');}
 function cancelDelete(){pendingDeleteId=null;$('#delete-modal').classList.add('hidden');$('#delete-backdrop').classList.add('hidden');}
 function confirmDelete(){if(!pendingDeleteId)return;chats=chats.filter(c=>c.id!==pendingDeleteId);if(activeChatId===pendingDeleteId){activeChatId=chats[0]?.id||null;replaceChatUrl(activeChatId);}cancelDelete();saveChats();renderChatList();renderMessages();}
@@ -331,7 +331,7 @@ function showDeleteAllModal(){
 function cancelDeleteAll(){$('#delete-all-modal').classList.add('hidden');$('#delete-all-backdrop').classList.add('hidden');}
 function confirmDeleteAll(){
   chats=[];activeChatId=null;cancelDeleteAll();saveChats();renderChatList();renderMessages();
-  newChat(); // start fresh
+  newChat(true); // start fresh
 }
 
 function autoTitleChat(chat){
@@ -416,7 +416,7 @@ async function send(){
   const text=inputEl.value.trim();if(!text&&!pendingFiles.length)return;
   const{endpoint,apiKey,system}=getCfg();if(!endpoint||!apiKey){toggleSettings();return;}
   if(endpoint&&!endpoint.startsWith('https://')){alert('Please use an HTTPS endpoint for security.');toggleSettings();return;}
-  if(!getChat())newChat();const chat=getChat();
+  if(!getChat())newChat(true);const chat=getChat();
   if(chat.messages.length===0&&system)chat.messages.push({role:'system',content:system});
   let userContent=text;const msgFiles=[...pendingFiles];const MAX_INPUT_LENGTH=100000;
   if(userContent.length>MAX_INPUT_LENGTH){alert(`Message too long (${userContent.length} chars). Max is ${MAX_INPUT_LENGTH}.`);return;}
@@ -472,9 +472,9 @@ function initApp(){
     const urlChatId=pathMatch[1];
     const found=chats.find(c=>c.id===urlChatId);
     if(found){activeChatId=urlChatId;saveChats();renderChatList();renderMessages();replaceChatUrl(urlChatId);}
-    else{newChat();} // chat not found locally, start fresh
+    else{newChat(true);} // chat not found locally, start fresh
   }else{
-    newChat();
+    newChat(true);
   }
   if(localStorage.getItem('chat-endpoint')&&localStorage.getItem('chat-apikey'))fetchModels();
   setTimeout(()=>$('#input').focus(),100);
@@ -483,7 +483,7 @@ function initApp(){
 window.addEventListener('popstate',e=>{
   const id=e.state?.chatId;
   if(id&&chats.find(c=>c.id===id)){activeChatId=id;saveChats();renderChatList();renderMessages();}
-  else{newChat();}
+  else{newChat(true);}
 });
 initApp();
 </script>
