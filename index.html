@@ -28,20 +28,25 @@
   .md-content code:not(pre code){background:#1a1a1f;padding:2px 5px;border-radius:4px;font-size:13px;font-family:'SF Mono','Fira Code',monospace;color:#c4b5fd}
   .md-content pre{position:relative;margin:10px 0;border-radius:8px;border:1px solid #27272f;overflow:hidden}
   .md-content pre code{display:block;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.6;background:#0d0d12;color:#d4d4d8}
-  .code-header{display:flex;justify-content:space-between;align-items:center;padding:5px 12px;background:#141418;border-bottom:1px solid #27272f;font-size:11px;color:#6b6b78}
-  .copy-btn{cursor:pointer;padding:3px 10px;border-radius:5px;border:1px solid transparent;background:transparent;color:#6b6b78;font-size:11px;transition:all .15s}
+  .code-header{display:flex;justify-content:space-between;align-items:center;padding:5px 12px;background:#141418;border-bottom:1px solid #27272f;font-size:11px;color:#6b6b78;position:sticky;top:0;z-index:5}
+  .copy-btn{cursor:pointer;padding:3px 10px;border-radius:5px;border:1px solid transparent;background:transparent;color:#6b6b78;font-size:11px;transition:all .15s;position:relative;z-index:6}
   .copy-btn:hover{border-color:#7c5cfc;color:#e4e4e7}
   .file-chip{display:inline-flex;align-items:center;gap:5px;background:#1a1a1f;border:1px solid #27272f;border-radius:8px;padding:5px 10px;font-size:12px;color:#9898a6}
   .msg-actions{opacity:0;transition:opacity .15s}.message-row:hover .msg-actions,.message-row:active .msg-actions{opacity:1}
   .model-option{padding:10px 14px;cursor:pointer;transition:background .1s;font-size:13px;color:#b0b0bc}
   .model-option:hover,.model-option.active{background:#222228;color:#f0f0f2}
-  /* Tooltip: wrapper is relative, tip is hidden child */
   .tip-wrap{position:relative;display:inline-flex}
   .tip-icon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;background:#222228;color:#6b6b78;font-size:9px;cursor:default;flex-shrink:0;user-select:none}
   .tip-text{display:none;position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);background:#1a1a1f;border:1px solid #32323c;color:#b0b0bc;font-size:11.5px;line-height:1.5;padding:7px 11px;border-radius:8px;width:220px;z-index:999;box-shadow:0 8px 20px rgba(0,0,0,.5);white-space:normal;pointer-events:none}
   .tip-wrap:hover .tip-text{display:block}
-  /* Mobile: tip anchored left */
   @media(max-width:640px){.tip-text{left:0;transform:none}}
+  /* Scroll-to-bottom button */
+  .scroll-bottom-btn{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);z-index:10;background:#222228;border:1px solid #32323c;color:#b0b0bc;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.4);transition:all .15s;opacity:0;pointer-events:none}
+  .scroll-bottom-btn.visible{opacity:1;pointer-events:auto}
+  .scroll-bottom-btn:hover{background:#2a2a32;color:#f0f0f2;border-color:#7c5cfc}
+  /* Continue generating button */
+  .continue-btn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:10px;border:1px solid #32323c;background:#1a1a1f;color:#b0b0bc;font-size:12px;cursor:pointer;transition:all .15s;margin-top:8px}
+  .continue-btn:hover{border-color:#7c5cfc;color:#f0f0f2;background:#222228}
 </style>
 </head>
 <body class="h-full bg-bg text-zinc-200 flex overflow-hidden">
@@ -95,8 +100,13 @@
     <div id="model-list" class="max-h-[280px] overflow-y-auto"></div>
   </div>
 
-  <!-- Messages -->
-  <div id="messages" class="flex-1 overflow-y-auto scroll-smooth"></div>
+  <!-- Messages wrapper (relative for scroll button) -->
+  <div class="flex-1 relative min-h-0">
+    <div id="messages" class="h-full overflow-y-auto scroll-smooth"></div>
+    <button id="scroll-bottom-btn" class="scroll-bottom-btn" onclick="scrollToBottomAndAttach()" title="Scroll to bottom">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+    </button>
+  </div>
 
   <!-- Attachments -->
   <div id="attachments" class="hidden px-4 pt-2 max-w-[740px] mx-auto w-full">
@@ -106,13 +116,13 @@
   <!-- Input -->
   <div class="p-3 sm:p-4 flex-shrink-0">
     <div class="max-w-[740px] mx-auto">
-      <div class="flex items-end gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
+      <div class="flex items-center gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
         <label title="Attach" class="flex-shrink-0 cursor-pointer p-1.5 rounded-xl hover:bg-surface-3 transition text-zinc-500 hover:text-zinc-300">
           <input id="file-input" type="file" multiple class="hidden" onchange="handleFiles(this.files)" />
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
         </label>
         <textarea id="input" rows="1" placeholder="Ask anything..." autofocus
-          class="flex-1 bg-transparent text-[15px] outline-none resize-none max-h-40 leading-relaxed font-[inherit] placeholder:text-zinc-600 py-1"></textarea>
+          class="flex-1 bg-transparent text-[15px] outline-none resize-none max-h-40 leading-relaxed font-[inherit] placeholder:text-zinc-600 self-center"></textarea>
         <button id="send-btn" onclick="handleSendClick()"
           class="flex-shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition bg-accent hover:bg-accent-hover text-white">
           <svg id="send-icon" class="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -124,7 +134,7 @@
   </div>
 </main>
 
-<!-- Delete Confirm -->
+<!-- Delete Chat Confirm -->
 <div id="delete-backdrop" class="hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onclick="cancelDelete()"></div>
 <div id="delete-modal" class="hidden fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-sm bg-surface-2 border border-border rounded-2xl shadow-2xl shadow-black/60 p-6">
   <h3 class="text-[15px] font-semibold mb-2">Delete chat?</h3>
@@ -132,6 +142,17 @@
   <div class="flex justify-end gap-2">
     <button onclick="cancelDelete()" class="px-4 py-2 rounded-xl text-sm text-zinc-400 hover:text-zinc-200 hover:bg-surface-3 transition">Cancel</button>
     <button onclick="confirmDelete()" class="px-4 py-2 rounded-xl text-sm bg-red-600 hover:bg-red-500 text-white transition font-medium">Delete</button>
+  </div>
+</div>
+
+<!-- Delete ALL Chats Confirm -->
+<div id="delete-all-backdrop" class="hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onclick="cancelDeleteAll()"></div>
+<div id="delete-all-modal" class="hidden fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[90vw] max-w-sm bg-surface-2 border border-border rounded-2xl shadow-2xl shadow-black/60 p-6">
+  <h3 class="text-[15px] font-semibold mb-2">Delete all chats?</h3>
+  <p class="text-sm text-zinc-400 mb-5">This will permanently delete all conversations. This action cannot be undone.</p>
+  <div class="flex justify-end gap-2">
+    <button onclick="cancelDeleteAll()" class="px-4 py-2 rounded-xl text-sm text-zinc-400 hover:text-zinc-200 hover:bg-surface-3 transition">Cancel</button>
+    <button onclick="confirmDeleteAll()" class="px-4 py-2 rounded-xl text-sm bg-red-600 hover:bg-red-500 text-white transition font-medium">Delete All</button>
   </div>
 </div>
 
@@ -182,6 +203,16 @@
         <div class="flex justify-between text-[10px] text-zinc-600"><span>Precise</span><span>Creative</span></div>
       </div>
     </div>
+    <!-- Danger zone: Delete all chats -->
+    <div class="pt-3 mt-2 border-t border-border">
+      <div class="flex items-center justify-between">
+        <div>
+          <div class="text-sm font-medium text-zinc-300">Delete all chats</div>
+          <div class="text-xs text-zinc-600 mt-0.5">Permanently remove all conversations</div>
+        </div>
+        <button onclick="showDeleteAllModal()" class="px-4 py-2 rounded-xl text-sm bg-red-600/10 text-red-400 hover:bg-red-600/20 hover:text-red-300 border border-red-600/20 transition font-medium">Delete All</button>
+      </div>
+    </div>
   </div>
   <div class="px-5 py-3 border-t border-border flex justify-end flex-shrink-0">
     <button onclick="toggleSettings()" class="bg-accent hover:bg-accent-hover text-sm px-5 py-1.5 rounded-xl transition font-medium">Done</button>
@@ -193,8 +224,30 @@ const $=s=>document.querySelector(s);
 let chats=JSON.parse(localStorage.getItem('chats')||'[]');
 let activeChatId=localStorage.getItem('activeChatId')||null;
 let streaming=false,abortController=null,pendingFiles=[],allModels=[],pendingDeleteId=null;
+let userScrolledAway=false,autoScrollEnabled=true;
+let lastStopReason=null; // track if generation stopped due to token limit
 
 marked.setOptions({highlight:(code,lang)=>{try{return lang&&hljs.getLanguage(lang)?hljs.highlight(code,{language:lang}).value:hljs.highlightAuto(code).value}catch{return code}},breaks:true,gfm:true});
+
+// ── Scroll tracking ──
+const messagesEl=$('#messages');
+messagesEl.addEventListener('scroll',()=>{
+  if(!streaming){updateScrollBtn();return;}
+  const atBottom=messagesEl.scrollHeight-messagesEl.scrollTop-messagesEl.clientHeight<80;
+  if(!atBottom){userScrolledAway=true;autoScrollEnabled=false;}
+  updateScrollBtn();
+});
+function updateScrollBtn(){
+  const atBottom=messagesEl.scrollHeight-messagesEl.scrollTop-messagesEl.clientHeight<80;
+  const btn=$('#scroll-bottom-btn');
+  if(atBottom){btn.classList.remove('visible');}
+  else{btn.classList.add('visible');}
+}
+function scrollToBottomAndAttach(){
+  autoScrollEnabled=true;userScrolledAway=false;
+  messagesEl.scrollTop=messagesEl.scrollHeight;
+  updateScrollBtn();
+}
 
 // ── Config ──
 ['endpoint','apikey','system','maxtokens','temp'].forEach(k=>{
@@ -223,6 +276,7 @@ document.addEventListener('keydown',e=>{
     if(!$('#settings').classList.contains('hidden'))toggleSettings();
     if(!$('#model-picker').classList.contains('hidden'))closeModelPicker();
     if(!$('#delete-modal').classList.contains('hidden'))cancelDelete();
+    if(!$('#delete-all-modal').classList.contains('hidden'))cancelDeleteAll();
   }
 });
 if(!localStorage.getItem('chat-endpoint')||!localStorage.getItem('chat-apikey'))toggleSettings();
@@ -261,11 +315,25 @@ document.addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files.
 // ── Chats ──
 function saveChats(){localStorage.setItem('chats',JSON.stringify(chats));localStorage.setItem('activeChatId',activeChatId);}
 function getChat(){return chats.find(c=>c.id===activeChatId)||null;}
-function newChat(){autoTitleChat(getChat());const c={id:crypto.randomUUID(),title:'New chat',messages:[],created:Date.now()};chats.unshift(c);activeChatId=c.id;saveChats();renderChatList();renderMessages();$('#input').focus();if(window.innerWidth<640)toggleSidebar();}
+function pushChatUrl(id){if(id)history.pushState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
+function replaceChatUrl(id){if(id)history.replaceState({chatId:id},'','/c/'+id);else history.replaceState(null,'','/');}
+function newChat(){autoTitleChat(getChat());const c={id:crypto.randomUUID(),title:'New chat',messages:[],created:Date.now()};chats.unshift(c);activeChatId=c.id;saveChats();renderChatList();renderMessages();pushChatUrl(c.id);$('#input').focus();if(window.innerWidth<640)toggleSidebar();}
 function deleteChat(id,e){e.stopPropagation();pendingDeleteId=id;$('#delete-modal').classList.remove('hidden');$('#delete-backdrop').classList.remove('hidden');}
 function cancelDelete(){pendingDeleteId=null;$('#delete-modal').classList.add('hidden');$('#delete-backdrop').classList.add('hidden');}
-function confirmDelete(){if(!pendingDeleteId)return;chats=chats.filter(c=>c.id!==pendingDeleteId);if(activeChatId===pendingDeleteId)activeChatId=chats[0]?.id||null;cancelDelete();saveChats();renderChatList();renderMessages();}
-function selectChat(id){if(id===activeChatId)return;autoTitleChat(getChat());activeChatId=id;saveChats();renderChatList();renderMessages();if(window.innerWidth<640)toggleSidebar();}
+function confirmDelete(){if(!pendingDeleteId)return;chats=chats.filter(c=>c.id!==pendingDeleteId);if(activeChatId===pendingDeleteId){activeChatId=chats[0]?.id||null;replaceChatUrl(activeChatId);}cancelDelete();saveChats();renderChatList();renderMessages();}
+function selectChat(id){if(id===activeChatId)return;autoTitleChat(getChat());activeChatId=id;saveChats();renderChatList();renderMessages();pushChatUrl(id);if(window.innerWidth<640)toggleSidebar();}
+
+// ── Delete All Chats ──
+function showDeleteAllModal(){
+  toggleSettings(); // close settings first
+  $('#delete-all-modal').classList.remove('hidden');$('#delete-all-backdrop').classList.remove('hidden');
+}
+function cancelDeleteAll(){$('#delete-all-modal').classList.add('hidden');$('#delete-all-backdrop').classList.add('hidden');}
+function confirmDeleteAll(){
+  chats=[];activeChatId=null;cancelDeleteAll();saveChats();renderChatList();renderMessages();
+  newChat(); // start fresh
+}
+
 function autoTitleChat(chat){
   if(!chat||chat.title!=='New chat'||chat.messages.length<2)return;
   const u=chat.messages.filter(m=>m.role==='user'),a=chat.messages.filter(m=>m.role==='assistant');
@@ -288,10 +356,10 @@ function renderChatList(){
 // ── Rendering ──
 function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function renderMarkdown(text){const raw=marked.parse(text),clean=DOMPurify.sanitize(raw,{ADD_ATTR:['class','target'],ALLOW_DATA_ATTR:false}),w=document.createElement('div');w.innerHTML=clean;w.querySelectorAll('pre').forEach(pre=>{const code=pre.querySelector('code'),lang=code?.className?.match(/language-(\w+)/)?.[1]||'',hdr=document.createElement('div');hdr.className='code-header';hdr.innerHTML=`<span>${lang||'code'}</span><button class="copy-btn" onclick="copyCode(this)">Copy</button>`;pre.insertBefore(hdr,pre.firstChild);});return w.innerHTML;}
-function copyCode(btn){navigator.clipboard.writeText(btn.closest('pre').querySelector('code').textContent);btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500);}
+function copyCode(btn){const pre=btn.closest('pre');const code=pre.querySelector('code');navigator.clipboard.writeText(code.textContent);btn.textContent='Copied!';setTimeout(()=>btn.textContent='Copy',1500);}
 
 function renderMessages(){
-  const chat=getChat(),el=$('#messages');el.innerHTML='';
+  const chat=getChat(),el=$('#messages');el.innerHTML='';lastStopReason=null;
   if(!chat||!chat.messages.filter(m=>m.role!=='system').length){
     el.innerHTML=`<div class="h-full flex flex-col items-center justify-center gap-4 px-4">
       <div class="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center"><svg class="w-7 h-7 text-accent/60" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg></div>
@@ -315,13 +383,24 @@ function appendMessageEl(role,text,files,msgIdx){
     if(role==='user')actions.innerHTML=`<button onclick="editMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">✎ Edit</button>`;
     if(role==='assistant')actions.innerHTML=`<button onclick="copyMessage(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">⎘ Copy</button><button onclick="regenerate(${msgIdx})" class="text-[11px] text-zinc-600 hover:text-zinc-300 px-2 py-1 rounded-lg hover:bg-surface-3 transition">↻ Regenerate</button>`;
     content.appendChild(actions);}
-  inner.appendChild(avatar);inner.appendChild(content);row.appendChild(inner);el.appendChild(row);el.scrollTop=el.scrollHeight;return textDiv;
+  inner.appendChild(avatar);inner.appendChild(content);row.appendChild(inner);el.appendChild(row);
+  if(autoScrollEnabled)el.scrollTop=el.scrollHeight;
+  return textDiv;
 }
 
 // ── Actions ──
 function editMessage(idx){const chat=getChat();if(!chat)return;$('#input').value=chat.messages[idx].content;$('#input').focus();$('#input').style.height='auto';$('#input').style.height=Math.min($('#input').scrollHeight,160)+'px';chat.messages=chat.messages.slice(0,idx);saveChats();renderMessages();}
 function copyMessage(idx){const chat=getChat();if(chat)navigator.clipboard.writeText(chat.messages[idx].content);}
 function regenerate(idx){const chat=getChat();if(!chat||streaming)return;chat.messages=chat.messages.slice(0,idx);saveChats();renderMessages();doStream(chat);}
+
+// ── Continue generating ──
+function continueGenerating(){
+  const chat=getChat();if(!chat||streaming)return;
+  // Add a user message asking to continue
+  chat.messages.push({role:'user',content:'Please continue generating from where you left off.'});
+  saveChats();renderChatList();appendMessageEl('user','Please continue generating from where you left off.',null,chat.messages.length-1);
+  doStream(chat);
+}
 
 // ── Send / Stop ──
 const inputEl=$('#input');
@@ -331,7 +410,7 @@ inputEl.addEventListener('paste',e=>{const items=e.clipboardData?.items;if(!item
 
 function handleSendClick(){if(streaming)stopStreaming();else send();}
 function setStreamingUI(on){streaming=on;$('#send-icon').classList.toggle('hidden',on);$('#stop-icon').classList.toggle('hidden',!on);$('#send-btn').classList.toggle('bg-accent',!on);$('#send-btn').classList.toggle('bg-red-600',on);}
-function stopStreaming(){if(abortController){abortController.abort();abortController=null;}}
+function stopStreaming(){if(abortController)abortController.abort();setStreamingUI(false);}
 
 async function send(){
   const text=inputEl.value.trim();if(!text&&!pendingFiles.length)return;
@@ -351,6 +430,7 @@ async function send(){
 
 async function doStream(chat){
   const{endpoint,apiKey,model,maxTokens,temperature}=getCfg();setStreamingUI(true);
+  userScrolledAway=false;autoScrollEnabled=true;lastStopReason=null;
   const contentEl=appendMessageEl('assistant','',null,chat.messages.length);
   const cursor=document.createElement('span');cursor.className='inline-block w-0.5 h-4 bg-accent cursor-blink align-text-bottom ml-px';contentEl.appendChild(cursor);
   let fullText='';abortController=new AbortController();
@@ -361,15 +441,51 @@ async function doStream(chat){
     const reader=res.body.getReader(),decoder=new TextDecoder();let buffer='';
     while(true){const{done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop();
       for(const line of lines){if(!line.startsWith('data: '))continue;const data=line.slice(6);if(data==='[DONE]')break;
-        try{const delta=JSON.parse(data).choices?.[0]?.delta?.content;if(delta){fullText+=delta;contentEl.innerHTML=renderMarkdown(fullText);contentEl.appendChild(cursor);$('#messages').scrollTop=$('#messages').scrollHeight;}}catch{}}}
+        try{const parsed=JSON.parse(data);const choice=parsed.choices?.[0];const delta=choice?.delta?.content;
+          if(choice?.finish_reason==='length')lastStopReason='length';
+          if(delta){fullText+=delta;contentEl.innerHTML=renderMarkdown(fullText);contentEl.appendChild(cursor);
+            if(autoScrollEnabled)$('#messages').scrollTop=$('#messages').scrollHeight;}}catch{}}}
   }catch(err){if(err.name!=='AbortError'){contentEl.textContent=`Error: ${err.message}`;contentEl.classList.add('text-red-400');cursor.remove();setStreamingUI(false);return;}}
-  cursor.remove();if(fullText){contentEl.innerHTML=renderMarkdown(fullText);chat.messages.push({role:'assistant',content:fullText});saveChats();}
+  cursor.remove();
+  if(fullText){
+    contentEl.innerHTML=renderMarkdown(fullText);
+    chat.messages.push({role:'assistant',content:fullText});saveChats();
+    // Show continue button if stopped due to token limit
+    if(lastStopReason==='length'){
+      const continueBtn=document.createElement('button');
+      continueBtn.className='continue-btn';
+      continueBtn.innerHTML='<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7"/></svg> Continue generating';
+      continueBtn.onclick=()=>{continueBtn.remove();continueGenerating();};
+      contentEl.appendChild(continueBtn);
+    }
+  }
   setStreamingUI(false);abortController=null;inputEl.focus();
+  updateScrollBtn();
 }
 
-// ── Init ──
-renderChatList();if(activeChatId)renderMessages();
-if(localStorage.getItem('chat-endpoint')&&localStorage.getItem('chat-apikey'))fetchModels();
+// ── Init: always open a new chat on page load ──
+function initApp(){
+  renderChatList();
+  // Check if URL has a chat ID to restore
+  const pathMatch=location.pathname.match(/^\/c\/([a-f0-9-]+)$/i);
+  if(pathMatch){
+    const urlChatId=pathMatch[1];
+    const found=chats.find(c=>c.id===urlChatId);
+    if(found){activeChatId=urlChatId;saveChats();renderChatList();renderMessages();replaceChatUrl(urlChatId);}
+    else{newChat();} // chat not found locally, start fresh
+  }else{
+    newChat();
+  }
+  if(localStorage.getItem('chat-endpoint')&&localStorage.getItem('chat-apikey'))fetchModels();
+  setTimeout(()=>$('#input').focus(),100);
+}
+// Handle browser back/forward
+window.addEventListener('popstate',e=>{
+  const id=e.state?.chatId;
+  if(id&&chats.find(c=>c.id===id)){activeChatId=id;saveChats();renderChatList();renderMessages();}
+  else{newChat();}
+});
+initApp();
 </script>
 </body>
 </html>
