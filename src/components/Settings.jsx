@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getCfgValue, setCfgValue } from '../lib/storage';
+import GradientText from './reactbits/GradientText';
 
 export default function Settings({ open, onClose, onDeleteAll }) {
   const [endpoint, setEndpoint] = useState('');
@@ -20,28 +21,68 @@ export default function Settings({ open, onClose, onDeleteAll }) {
 
   if (!open) return null;
 
+  const glassStyle = {
+    background: 'rgba(16, 16, 20, 0.65)',
+    backdropFilter: 'blur(32px)',
+    WebkitBackdropFilter: 'blur(32px)',
+    border: '1px solid rgba(255,255,255,0.08)',
+  };
+
+  const inputStyle = {
+    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid rgba(255,255,255,0.08)',
+  };
+
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md bg-surface-2 border border-border rounded-2xl shadow-2xl shadow-black/60 flex flex-col max-h-[95vh]">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-border shrink-0">
-          <h2 className="text-sm font-semibold">Settings</h2>
+      <div
+        className="fixed inset-0 z-40"
+        style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)' }}
+        onClick={onClose}
+      />
+      <div
+        className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] max-w-md rounded-2xl shadow-2xl shadow-black/60 flex flex-col max-h-[95vh]"
+        style={glassStyle}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <GradientText
+            className="text-sm font-semibold"
+            colors={['#7c5cfc', '#00ffd1', '#ff5c7a', '#7c5cfc']}
+            animationSpeed={6}
+          >
+            Settings
+          </GradientText>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
+            style={{ background: 'rgba(255,255,255,0.04)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
         </div>
+
+        {/* Body */}
         <div className="p-5 space-y-3 overflow-y-auto">
           <Field label="API Endpoint" tip="Base URL of your gateway">
             <input value={endpoint} onChange={e => { setEndpoint(e.target.value); save('endpoint', e.target.value); }}
               placeholder="https://xxx.execute-api.region.amazonaws.com/v1"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent transition placeholder:text-zinc-700" />
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50"
+              style={inputStyle} />
           </Field>
           <Field label="API Key" tip="Secret key for auth. Sent as Bearer token.">
             <input type="password" value={apiKey} onChange={e => { setApiKey(e.target.value); save('apikey', e.target.value); }}
               placeholder="Your API key"
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent transition placeholder:text-zinc-700" />
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50"
+              style={inputStyle} />
           </Field>
           <Field label="System Prompt" tip="Instructions at the start of every chat.">
             <textarea value={system} onChange={e => { setSystem(e.target.value); save('system', e.target.value); }}
               rows={2} placeholder="You are a helpful assistant."
-              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-accent transition placeholder:text-zinc-700 resize-none leading-relaxed" />
+              className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 resize-none leading-relaxed text-zinc-200 focus:ring-1 focus:ring-accent/50"
+              style={inputStyle} />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label={<>Max Tokens <span className="text-zinc-500 font-normal text-xs">{maxTokens}</span></>} tip="Max response length.">
@@ -58,19 +99,37 @@ export default function Settings({ open, onClose, onDeleteAll }) {
             </Field>
           </div>
 
-          <div className="pt-3 mt-2 border-t border-border">
+          {/* Danger zone */}
+          <div className="pt-3 mt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-sm font-medium text-zinc-300">Delete all chats</div>
                 <div className="text-xs text-zinc-600 mt-0.5">Permanently remove all conversations</div>
               </div>
-              <button onClick={onDeleteAll} className="px-4 py-2 rounded-xl text-sm bg-red-600/10 text-red-400 hover:bg-red-600/20 hover:text-red-300 border border-red-600/20 transition font-medium cursor-pointer">Delete All</button>
+              <button
+                onClick={onDeleteAll}
+                className="px-4 py-2 rounded-xl text-sm text-red-400 hover:text-red-300 transition font-medium cursor-pointer"
+                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.15)'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.25)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(220,38,38,0.08)'; e.currentTarget.style.borderColor = 'rgba(220,38,38,0.15)'; }}
+              >
+                Delete All
+              </button>
             </div>
           </div>
         </div>
-        <div className="px-5 py-3 border-t border-border flex justify-between shrink-0">
-          <button onClick={onClose} className="text-sm px-4 py-1.5 rounded-xl transition font-medium text-zinc-500 hover:text-zinc-200 hover:bg-surface-3 cursor-pointer">Close</button>
-          <button onClick={onClose} className="bg-accent hover:bg-accent-hover text-sm px-5 py-1.5 rounded-xl transition font-medium text-white cursor-pointer">Done</button>
+
+        {/* Footer */}
+        <div className="px-5 py-3 flex justify-end shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={onClose}
+            className="text-sm px-5 py-1.5 rounded-xl transition font-medium text-white cursor-pointer"
+            style={{ background: 'rgba(124,92,252,0.8)', border: '1px solid rgba(124,92,252,0.4)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,92,252,1)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(124,92,252,0.8)'}
+          >
+            Done
+          </button>
         </div>
       </div>
     </>
@@ -84,8 +143,14 @@ function Field({ label, tip, children }) {
         {label}
         {tip && (
           <span className="relative inline-flex group">
-            <span className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full bg-surface-3 text-zinc-600 text-[9px] cursor-default">?</span>
-            <span className="hidden group-hover:block absolute left-1/2 top-full mt-1.5 -translate-x-1/2 bg-surface-2 border border-border-light text-zinc-400 text-[11.5px] leading-relaxed p-2 rounded-lg w-[220px] z-50 shadow-lg shadow-black/50 pointer-events-none">{tip}</span>
+            <span
+              className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full text-zinc-600 text-[9px] cursor-default"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+            >?</span>
+            <span
+              className="hidden group-hover:block absolute left-1/2 top-full mt-1.5 -translate-x-1/2 text-zinc-400 text-[11.5px] leading-relaxed p-2 rounded-lg w-[220px] z-50 shadow-lg shadow-black/50 pointer-events-none"
+              style={{ background: 'rgba(16,16,20,0.9)', border: '1px solid rgba(255,255,255,0.08)' }}
+            >{tip}</span>
           </span>
         )}
       </div>
