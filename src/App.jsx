@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChat } from './hooks/useChat';
 import { streamChat, getConfig } from './lib/stream';
 import Sidebar from './components/Sidebar';
@@ -8,19 +8,25 @@ import MessageArea from './components/MessageArea';
 import InputBar from './components/InputBar';
 import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/Toast';
-import Prism from './components/reactbits/Prism';
+import ColorBends from './components/reactbits/ColorBends';
 
-// ── URL helpers: use ?c=<uuid> query string ──
+// ── URL helpers: use /c/<uuid> paths, with ?c=<uuid> fallback for GitHub Pages 404 redirect ──
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
+
 function getChatIdFromUrl() {
+  // First check path: /c/<uuid> (or /base/c/<uuid>)
+  const pathMatch = window.location.pathname.match(/\/c\/([a-f0-9-]+)/);
+  if (pathMatch) return pathMatch[1];
+  // Fallback: ?c=<uuid> (from GitHub Pages 404 redirect)
   return new URLSearchParams(window.location.search).get('c') || null;
 }
 function pushChatUrl(id) {
-  if (id) history.pushState({ chatId: id }, '', `?c=${id}`);
-  else history.replaceState(null, '', window.location.pathname);
+  if (id) history.pushState({ chatId: id }, '', `${BASE}/c/${id}`);
+  else history.replaceState(null, '', `${BASE}/`);
 }
 function replaceChatUrl(id) {
-  if (id) history.replaceState({ chatId: id }, '', `?c=${id}`);
-  else history.replaceState(null, '', window.location.pathname);
+  if (id) history.replaceState({ chatId: id }, '', `${BASE}/c/${id}`);
+  else history.replaceState(null, '', `${BASE}/`);
 }
 
 export default function App() {
@@ -34,6 +40,12 @@ export default function App() {
   const [streamContent, setStreamContent] = useState('');
   const [showContinue, setShowContinue] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const streamContentRef = useRef('');
+
+  const updateStreamContent = useCallback((val) => {
+    streamContentRef.current = val;
+    setStreamContent(val);
+  }, []);
 
   // ── Init: restore chat from URL or create a new one ──
   useEffect(() => {
@@ -79,7 +91,7 @@ export default function App() {
     }
 
     chat.setStreaming(true);
-    setStreamContent('');
+    updateStreamContent('');
     setShowContinue(false);
     setContinuing(false);
     chat.abortRef.current = new AbortController();
@@ -88,24 +100,31 @@ export default function App() {
       await streamChat(
         chatData,
         chat.abortRef.current,
-        (text) => setStreamContent(text),
+        (text) => updateStreamContent(text),
         (fullText, stopReason) => {
           if (fullText) {
             chat.addAssistantMessage(fullText);
             if (stopReason === 'length') setShowContinue(true);
           }
-          setStreamContent('');
+          updateStreamContent('');
           chat.setStreaming(false);
           chat.abortRef.current = null;
         },
         (err) => {
-          setStreamContent(`Error: ${err.message}`);
+          updateStreamContent(`Error: ${err.message}`);
           chat.setStreaming(false);
         }
       );
     } catch (err) {
       if (err.name !== 'AbortError') {
-        setStreamContent(`Error: ${err.message}`);
+        updateStreamContent(`Error: ${err.message}`);
+      } else {
+        // Save whatever was generated before the abort
+        const partial = streamContentRef.current;
+        if (partial) {
+          chat.addAssistantMessage(partial);
+        }
+        updateStreamContent('');
       }
       chat.setStreaming(false);
       chat.abortRef.current = null;
@@ -183,7 +202,7 @@ export default function App() {
 
       chat.setStreaming(true);
       setContinuing(true);
-      setStreamContent(previousContent);
+      updateStreamContent(previousContent);
       chat.abortRef.current = new AbortController();
 
       try {
@@ -192,7 +211,7 @@ export default function App() {
           chat.abortRef.current,
           (newText) => {
             const cleaned = cleanContinuation(newText);
-            setStreamContent(previousContent + cleaned);
+            updateStreamContent(previousContent + cleaned);
           },
           (fullText, stopReason) => {
             if (fullText) {
@@ -200,20 +219,31 @@ export default function App() {
               chat.appendToLastAssistant(cleaned);
               if (stopReason === 'length') setShowContinue(true);
             }
-            setStreamContent('');
+            updateStreamContent('');
             setContinuing(false);
             chat.setStreaming(false);
             chat.abortRef.current = null;
           },
           (err) => {
-            setStreamContent(`Error: ${err.message}`);
+            updateStreamContent(`Error: ${err.message}`);
             setContinuing(false);
             chat.setStreaming(false);
           }
         );
       } catch (err) {
         if (err.name !== 'AbortError') {
-          setStreamContent(`Error: ${err.message}`);
+          updateStreamContent(`Error: ${err.message}`);
+        } else {
+          // Save the partial continuation content
+          const partial = streamContentRef.current;
+          if (partial) {
+            // The partial content includes previousContent prefix, so extract only the new part
+            const newPart = partial.slice(previousContent.length);
+            if (newPart) {
+              chat.appendToLastAssistant(newPart);
+            }
+          }
+          updateStreamContent('');
         }
         setContinuing(false);
         chat.setStreaming(false);
@@ -268,16 +298,18 @@ export default function App() {
     <div className="h-full flex overflow-hidden relative">
       {showEmptyState && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <Prism
-            animationType="rotate"
-            timeScale={0.5}
-            height={3.5}
-            baseWidth={5.5}
-            scale={3.6}
-            hueShift={0}
-            colorFrequency={1}
-            noise={0}
-            glow={1}
+          <ColorBends
+            colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
+            rotation={0}
+            speed={0.2}
+            scale={1}
+            frequency={1}
+            warpStrength={1}
+            mouseInfluence={1}
+            parallax={0.5}
+            noise={0.1}
+            transparent
+            autoRotate={0}
           />
         </div>
       )}
@@ -292,7 +324,7 @@ export default function App() {
         onClose={() => setSidebarOpen(false)}
       />
 
-      <main className="flex-1 flex flex-col h-full min-w-0">
+      <main className="flex-1 flex flex-col h-full min-w-0 relative">
         <div className="h-12 border-b border-border flex items-center justify-between px-4 pl-14 sm:pl-4 shrink-0 relative z-10 backdrop-blur-xl" style={{ background: 'rgba(12,12,14,0.6)' }}>
           <button onClick={() => setSidebarOpen(true)} className="sm:hidden w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-zinc-400 hover:text-zinc-200 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" /></svg>
@@ -318,6 +350,7 @@ export default function App() {
           onSend={handleSend}
           onStop={chat.stopStreaming}
           streaming={chat.streaming}
+          centered={showEmptyState}
         />
       </main>
 

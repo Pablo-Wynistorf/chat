@@ -1,7 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { renderMarkdown } from '../lib/markdown';
 import { showToast } from './Toast';
-import SplitText from './reactbits/SplitText';
 
 // Track code blocks queued for copy when streaming finishes
 const pendingCopyBlocks = new Set();
@@ -81,32 +80,6 @@ function flushPendingCopies(containerEl) {
     showToast(`Copied ${pendingCopyBlocks.size} code block${pendingCopyBlocks.size > 1 ? 's' : ''}`);
   }
   pendingCopyBlocks.clear();
-}
-
-function EmptyState() {
-  return (
-    <div className="h-full flex flex-col items-center justify-center gap-4 px-4 relative">
-      <div className="relative z-10 flex flex-col items-center gap-4 px-8 py-10 rounded-3xl" style={{ background: 'radial-gradient(ellipse at center, rgba(12,12,14,0.85) 0%, rgba(12,12,14,0.5) 60%, transparent 100%)' }}>
-        <div className="w-16 h-16 rounded-2xl bg-accent/20 backdrop-blur-sm flex items-center justify-center border border-accent/10">
-          <svg className="w-9 h-9 text-accent" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 9.75a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375m-13.5 3.01c0 1.6 1.123 2.994 2.707 3.227 1.087.16 2.185.283 3.293.369V21l4.184-4.183a1.14 1.14 0 0 1 .778-.332 48.294 48.294 0 0 0 5.83-.498c1.585-.233 2.708-1.626 2.708-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
-          </svg>
-        </div>
-        <div className="text-center">
-          <SplitText
-            text="How can I help?"
-            className="text-zinc-200 text-lg font-semibold drop-shadow-lg"
-            delay={50}
-            animationFrom={{ opacity: 0, transform: 'translate3d(0,20px,0)' }}
-            animationTo={{ opacity: 1, transform: 'translate3d(0,0,0)' }}
-            rootMargin="0px"
-            threshold={0}
-          />
-          <p className="text-zinc-400 text-sm mt-1.5 drop-shadow-md">Ask anything or drop a file</p>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 function Message({ msg, idx, streaming, onEditSave, onCopy, onRegenerate, onImageClick }) {
@@ -456,7 +429,7 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
     <div className="flex-1 relative min-h-0">
       <div ref={messagesRef} className="h-full overflow-y-auto scroll-smooth">
         {displayMessages.length === 0 && !streaming ? (
-          <EmptyState />
+          <div className="h-full" />
         ) : (
           <>
             {displayMessages.map((msg, i) => (

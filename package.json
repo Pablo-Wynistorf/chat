@@ -1,5 +1,5 @@
 {
-  "name": "ai-chat",
+  "name": "chat",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -19,7 +19,8 @@
     "ogl": "^1.0.11",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "tailwindcss": "^4.2.0"
+    "tailwindcss": "^4.2.0",
+    "three": "^0.183.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

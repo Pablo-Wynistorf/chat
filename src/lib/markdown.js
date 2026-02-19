@@ -15,6 +15,9 @@ marked.setOptions({
   gfm: true,
 });
 
+// Inline math $...$ regex: single-line, no $ next to word chars or *
+const INLINE_MATH_RE = /(?<![\\$\w*])\$(?!\$|\d|\s)([^$\n]+?)\$(?!\$)(?![\w*])/g;
+
 function renderLatex(html) {
   // Protect <code> and <pre> content from LaTeX processing
   const codeBlocks = [];
@@ -31,8 +34,9 @@ function renderLatex(html) {
   html = html.replace(/\\\[([\s\S]*?)\\\]/g, (m, tex) => {
     try { return katex.renderToString(tex.trim(), { displayMode: true, throwOnError: false }); } catch { return m; }
   });
-  // Inline math: $...$ (not $$)
-  html = html.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g, (m, tex) => {
+  // Inline math: $...$
+  html = html.replace(INLINE_MATH_RE, (m, tex) => {
+    if (/^\s|\s$/.test(tex)) return m;
     try { return katex.renderToString(tex.trim(), { displayMode: false, throwOnError: false }); } catch { return m; }
   });
   // Inline math: \(...\)
@@ -47,7 +51,6 @@ function renderLatex(html) {
 
 export function renderMarkdown(text, { isStreaming = false } = {}) {
   // Count code fences to determine which blocks are complete during streaming
-  // A complete code block has both opening and closing ```
   let completedBlockCount = 0;
   let hasIncompleteBlock = false;
   if (isStreaming) {
@@ -60,27 +63,61 @@ export function renderMarkdown(text, { isStreaming = false } = {}) {
 
   // Step 1: Protect code fences and inline code from math extraction
   const codeShields = [];
-
-  // Fenced code blocks: ```...```
   let p = text.replace(/```[\s\S]*?```/g, (m) => {
     codeShields.push(m);
     return `%%CSHIELD${codeShields.length - 1}%%`;
   });
-  // Inline code: `...`
   p = p.replace(/`[^`]+`/g, (m) => {
     codeShields.push(m);
     return `%%CSHIELD${codeShields.length - 1}%%`;
   });
 
-  // Step 2: Extract math blocks into placeholders (only from non-code text now)
+  // Step 2: Extract math blocks into placeholders (only from non-code text)
   const mathBlocks = [];
   p = p.replace(/\$\$([\s\S]*?)\$\$/g, (m) => { mathBlocks.push(m); return `%%MATH${mathBlocks.length - 1}%%`; });
   p = p.replace(/\\\[([\s\S]*?)\\\]/g, (m) => { mathBlocks.push(m); return `%%MATH${mathBlocks.length - 1}%%`; });
-  p = p.replace(/(?<!\$)\$(?!\$)((?:[^$\\]|\\.)+?)\$(?!\$)/g, (m) => { mathBlocks.push(m); return `%%MATH${mathBlocks.length - 1}%%`; });
+  p = p.replace(INLINE_MATH_RE, (m) => { mathBlocks.push(m); return `%%MATH${mathBlocks.length - 1}%%`; });
   p = p.replace(/\\\(([\s\S]*?)\\\)/g, (m) => { mathBlocks.push(m); return `%%MATH${mathBlocks.length - 1}%%`; });
 
   // Step 3: Restore code shields before passing to marked
   p = p.replace(/%%CSHIELD(\d+)%%/g, (m, i) => codeShields[parseInt(i)] || m);
+
+  // Step 3.5: Normalize block-level elements so they aren't swallowed by `breaks: true`.
+  // With `breaks: true`, single \n becomes <br>, preventing block elements from being
+  // recognized. Insert a blank line before block constructs when needed.
+  const lines = p.split('\n');
+  const result = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trimStart();
+    const prev = i > 0 ? lines[i - 1] : '';
+    const prevTrimmed = prev.trimStart();
+    const prevEmpty = prev.trim() === '';
+
+    if (!prevEmpty && i > 0) {
+      const isHeading = /^#{1,6} /.test(trimmed);
+      const isBlockquote = trimmed.startsWith('> ');
+      const isUnorderedList = /^[-*+] /.test(trimmed) && !/^\*\*/.test(trimmed);
+      const isOrderedList = /^\d+\. /.test(trimmed);
+      const prevIsUnorderedList = /^[-*+] /.test(prevTrimmed) && !/^\*\*/.test(prevTrimmed);
+      const prevIsOrderedList = /^\d+\. /.test(prevTrimmed);
+      const prevIsBlockquote = prevTrimmed.startsWith('> ');
+
+      if (isHeading) {
+        result.push('');
+      } else if (isBlockquote && !prevIsBlockquote) {
+        result.push('');
+      } else if ((isUnorderedList && !prevIsUnorderedList) ||
+                 (isOrderedList && !prevIsOrderedList)) {
+        result.push('');
+      }
+    }
+    result.push(line);
+  }
+  p = result.join('\n');
+
+  // Tables: blank line only before the first row (header + separator)
+  p = p.replace(/([^\n|])\n(\|.+\|\s*\n\|[-| :]+\|\s*\n)/g, '$1\n\n$2');
 
   // Step 4: Parse markdown
   const raw = marked.parse(p);
@@ -109,14 +146,11 @@ export function renderMarkdown(text, { isStreaming = false } = {}) {
     let btnLabel = 'Copy';
     let isIncomplete = false;
     if (isStreaming) {
-      // First N blocks are complete, the last one (if odd fence count) is incomplete
       if (idx < completedBlockCount) {
         btnLabel = 'Copy';
       } else if (hasIncompleteBlock && idx === preBlocks.length - 1) {
         btnLabel = 'Copy when done';
         isIncomplete = true;
-      } else {
-        btnLabel = 'Copy';
       }
     }
 
