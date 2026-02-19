@@ -33,8 +33,6 @@ jobs:
       - name: Build
         run: npm run build
         working-directory: .
-        env:
-          VITE_BASE: /${{ github.event.repository.name }}/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
