@@ -105,6 +105,7 @@ export default function ColorBends({
   mouseInfluence = 1,
   parallax = 0.5,
   noise = 0.1,
+  timeOffset = 0,
 }) {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
@@ -187,7 +188,7 @@ export default function ColorBends({
     const loop = () => {
       const dt = clock.getDelta();
       const elapsed = clock.elapsedTime;
-      material.uniforms.uTime.value = elapsed;
+      material.uniforms.uTime.value = elapsed + timeOffset;
 
       const deg = (rotationRef.current % 360) + autoRotateRef.current * elapsed;
       const rad = (deg * Math.PI) / 180;
@@ -215,7 +216,7 @@ export default function ColorBends({
         container.removeChild(renderer.domElement);
       }
     };
-  }, [frequency, mouseInfluence, noise, parallax, scale, speed, transparent, warpStrength]);
+  }, [frequency, mouseInfluence, noise, parallax, scale, speed, transparent, warpStrength, timeOffset]);
 
   useEffect(() => {
     const material = materialRef.current;
@@ -262,8 +263,8 @@ export default function ColorBends({
       const y = -(((e.clientY - rect.top) / (rect.height || 1)) * 2 - 1);
       pointerTargetRef.current.set(x, y);
     };
-    container.addEventListener('pointermove', handlePointerMove);
-    return () => container.removeEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointermove', handlePointerMove);
+    return () => window.removeEventListener('pointermove', handlePointerMove);
   }, []);
 
   return (

@@ -293,36 +293,25 @@ export default function App() {
   }, [chat]);
 
   const showEmptyState = !chat.streaming && (!chat.activeChat?.messages?.filter(m => m.role !== 'system').length);
-  const [bgVisible, setBgVisible] = useState(showEmptyState);
   const [bgFading, setBgFading] = useState(false);
+  const [bgTimeOffset] = useState(() => Math.random() * 1000);
+  const [bgRotation] = useState(() => Math.random() * 360);
 
-  // When showEmptyState becomes false, trigger fade-out; when true again, show immediately
   useEffect(() => {
-    if (showEmptyState) {
-      setBgVisible(true);
-      setBgFading(false);
-    } else if (bgVisible) {
-      setBgFading(true);
-      const timer = setTimeout(() => {
-        setBgVisible(false);
-        setBgFading(false);
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
+    setBgFading(!showEmptyState);
   }, [showEmptyState]);
 
   return (
     <div className="h-full flex overflow-hidden relative">
-      {bgVisible && (
+      {(
         <div style={{
           position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none',
-          opacity: bgFading ? 0 : 1,
+          opacity: bgFading ? 0.1 : 1,
           transition: 'opacity 3s ease-out',
         }}>
           <ColorBends
-            colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
-            rotation={0}
-            speed={0.08}
+            rotation={bgRotation}
+            speed={0.2}
             scale={1}
             frequency={1}
             warpStrength={1}
@@ -331,6 +320,7 @@ export default function App() {
             noise={0.1}
             transparent
             autoRotate={0}
+            timeOffset={bgTimeOffset}
           />
         </div>
       )}
