@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>AI Chat</title>
+  <script>
+    // SPA redirect for GitHub Pages — preserves the query string
+    var path = window.location.pathname;
+    var query = window.location.search;
+    var hash = window.location.hash;
+    window.location.replace(
+      window.location.origin + path.split('/').slice(0, 2).join('/') + '/' + query + hash
+    );
+  </script>
+</head>
+<body></body>
+</html>
