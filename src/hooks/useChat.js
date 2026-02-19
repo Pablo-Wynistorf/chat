@@ -1,15 +1,33 @@
-import { useState, useCallback, useRef } from 'react';
-import { loadChats, saveChats, loadActiveChatId, getCfgValue } from '../lib/storage';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { loadChatsRaw, loadChats, saveChats, deleteChatsFiles, deleteAllFiles, loadActiveChatId, getCfgValue } from '../lib/storage';
+import { deleteFiles } from '../lib/fileStore';
 
+// Collect fileIds from an array of messages
+function collectFileIds(messages) {
+  const ids = [];
+  for (const m of messages) {
+    if (m.files) for (const f of m.files) { if (f.fileId) ids.push(f.fileId); }
+  }
+  return ids;
+}
 export function useChat() {
-  const [chats, setChats] = useState(loadChats);
+  const [chats, setChats] = useState(loadChatsRaw);
   const [activeChatId, setActiveChatId] = useState(loadActiveChatId);
   const [streaming, setStreaming] = useState(false);
+  const [ready, setReady] = useState(false);
   const abortRef = useRef(null);
 
-  // Keep a ref so callbacks always see the latest chats without stale closures
   const chatsRef = useRef(chats);
   const activeIdRef = useRef(activeChatId);
+
+  // Hydrate file content from IndexedDB on mount
+  useEffect(() => {
+    loadChats().then(hydrated => {
+      chatsRef.current = hydrated;
+      setChats(hydrated);
+      setReady(true);
+    });
+  }, []);
 
   const persist = useCallback((newChats, newActiveId) => {
     chatsRef.current = newChats;
@@ -21,7 +39,6 @@ export function useChat() {
 
   const activeChat = chats.find(c => c.id === activeChatId) || null;
 
-  // Creates a new chat with a UUID, persists to localStorage, returns the id
   const newChat = useCallback(() => {
     const c = { id: crypto.randomUUID(), title: 'New chat', messages: [], created: Date.now() };
     const updated = [c, ...chatsRef.current];
@@ -35,18 +52,20 @@ export function useChat() {
 
   const deleteChat = useCallback((id) => {
     const current = chatsRef.current;
+    const deleted = current.filter(c => c.id === id);
     const updated = current.filter(c => c.id !== id);
     const currentActive = activeIdRef.current;
     const newActive = currentActive === id ? (updated[0]?.id || null) : currentActive;
+    deleteChatsFiles(deleted);
     persist(updated, newActive);
     return newActive;
   }, [persist]);
 
   const deleteAllChats = useCallback(() => {
+    deleteAllFiles();
     persist([], null);
   }, [persist]);
 
-  // Ensures there's an active chat, creating one if needed. Returns the active chat id.
   const ensureChat = useCallback(() => {
     const current = chatsRef.current;
     const currentActive = activeIdRef.current;
@@ -67,18 +86,18 @@ export function useChat() {
       chat.messages.push({ role: 'system', content: system });
     }
 
-    let userContent = text;
     const textFiles = files.filter(f => f.type === 'text');
     const imageFiles = files.filter(f => f.type === 'image');
 
+    let fileContent = '';
     if (textFiles.length) {
-      const tp = textFiles.map(f => `--- ${f.name} ---\n${f.content}\n--- end ---`);
-      userContent = [...tp, text].filter(Boolean).join('\n\n');
+      fileContent = textFiles.map(f => `--- ${f.name} ---\n${f.content}\n--- end ---`).join('\n\n');
     }
 
     const msg = {
       role: 'user',
-      content: userContent || (imageFiles.length ? '(image attached)' : ''),
+      content: text || (imageFiles.length ? '(image attached)' : ''),
+      fileContent: fileContent || undefined,
       files: files.length ? files : undefined,
       images: imageFiles.length ? imageFiles.map(f => f.content) : undefined,
     };
@@ -100,13 +119,12 @@ export function useChat() {
     chat.messages.push({ role: 'assistant', content: text });
     persist(current, currentActive);
   }, [persist]);
-  // Appends text to the last assistant message (for continue generating)
+
   const appendToLastAssistant = useCallback((text) => {
     const current = [...chatsRef.current];
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return;
-    // Find last assistant message
     for (let i = chat.messages.length - 1; i >= 0; i--) {
       if (chat.messages[i].role === 'assistant') {
         chat.messages[i].content += text;
@@ -116,7 +134,6 @@ export function useChat() {
     persist(current, currentActive);
   }, [persist]);
 
-  // Gets the content of the last assistant message
   const getLastAssistantContent = useCallback(() => {
     const current = chatsRef.current;
     const currentActive = activeIdRef.current;
@@ -128,36 +145,42 @@ export function useChat() {
     return '';
   }, []);
 
-
-
   const editMessage = useCallback((idx) => {
     const current = [...chatsRef.current];
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return '';
     const content = chat.messages[idx].content;
+    const removed = chat.messages.slice(idx);
+    const ids = collectFileIds(removed);
+    if (ids.length) deleteFiles(ids);
     chat.messages = chat.messages.slice(0, idx);
     persist(current, currentActive);
     return content;
   }, [persist]);
-  // Updates a message in place, truncates everything after it, returns the chat for re-streaming
+
   const updateMessage = useCallback((idx, newContent) => {
     const current = [...chatsRef.current];
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
     chat.messages[idx].content = newContent;
+    const removed = chat.messages.slice(idx + 1);
+    const ids = collectFileIds(removed);
+    if (ids.length) deleteFiles(ids);
     chat.messages = chat.messages.slice(0, idx + 1);
     persist(current, currentActive);
     return chat;
   }, [persist]);
-
 
   const regenerate = useCallback((idx) => {
     const current = [...chatsRef.current];
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
+    const removed = chat.messages.slice(idx);
+    const ids = collectFileIds(removed);
+    if (ids.length) deleteFiles(ids);
     chat.messages = chat.messages.slice(0, idx);
     persist(current, currentActive);
     return chat;
@@ -169,7 +192,7 @@ export function useChat() {
   }, []);
 
   return {
-    chats, activeChat, activeChatId, streaming, abortRef,
+    chats, activeChat, activeChatId, streaming, abortRef, ready,
     setStreaming, newChat, selectChat, deleteChat, deleteAllChats,
     ensureChat, addUserMessage, addAssistantMessage, appendToLastAssistant,
     getLastAssistantContent, editMessage, updateMessage,

@@ -96,7 +96,7 @@ export default function App() {
     setContinuing(false);
     chat.abortRef.current = new AbortController();
 
-    try {
+      try {
       await streamChat(
         chatData,
         chat.abortRef.current,
@@ -110,10 +110,6 @@ export default function App() {
           chat.setStreaming(false);
           chat.abortRef.current = null;
         },
-        (err) => {
-          updateStreamContent(`Error: ${err.message}`);
-          chat.setStreaming(false);
-        }
       );
     } catch (err) {
       if (err.name !== 'AbortError') {

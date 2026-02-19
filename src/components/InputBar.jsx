@@ -28,11 +28,34 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
     textareaRef.current?.focus();
   }, [centered, animating, streaming]);
 
+  const compressImage = (dataUrl, maxDim = 1024, quality = 0.7) => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      img.src = dataUrl;
+    });
+  };
+
   const handleFiles = (fileList) => {
     for (const f of fileList) {
       const reader = new FileReader();
       if (f.type.startsWith('image/')) {
-        reader.onload = () => setFiles(prev => [...prev, { name: f.name, content: reader.result, type: 'image' }]);
+        reader.onload = async () => {
+          const compressed = await compressImage(reader.result);
+          setFiles(prev => [...prev, { name: f.name, content: compressed, type: 'image' }]);
+        };
         reader.readAsDataURL(f);
       } else {
         reader.onload = () => setFiles(prev => [...prev, { name: f.name, content: reader.result, type: 'text' }]);
@@ -87,7 +110,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   const inputContent = (
     <>
       {fileAttachments}
-      <div className="flex items-end gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
+      <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
         <label className="shrink-0 cursor-pointer p-1.5 rounded-xl hover:bg-surface-3 transition text-zinc-500 hover:text-zinc-300">
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>

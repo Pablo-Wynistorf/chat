@@ -20,12 +20,16 @@ export async function streamChat(chat, abortController, onDelta, onDone, onError
     body: JSON.stringify({
       model,
       messages: chat.messages.map(m => {
+        // Merge file content back into the API payload
+        const msgText = m.fileContent
+          ? [m.fileContent, m.content].filter(Boolean).join('\n\n')
+          : m.content;
         if (m.images?.length) {
           const parts = m.images.map(url => ({ type: 'image_url', image_url: { url } }));
-          if (m.content) parts.push({ type: 'text', text: m.content });
+          if (msgText) parts.push({ type: 'text', text: msgText });
           return { role: m.role, content: parts };
         }
-        return { role: m.role, content: m.content };
+        return { role: m.role, content: msgText };
       }),
       max_tokens: maxTokens,
       temperature,
