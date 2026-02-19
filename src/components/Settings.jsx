@@ -53,15 +53,6 @@ export default function Settings({ open, onClose, onDeleteAll }) {
           >
             Settings
           </GradientText>
-          <button
-            onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
-            style={{ background: 'rgba(255,255,255,0.04)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
         </div>
 
         {/* Body */}
@@ -120,7 +111,16 @@ export default function Settings({ open, onClose, onDeleteAll }) {
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-3 flex justify-end shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+        <div className="px-5 py-3 flex justify-between items-center shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <button
+            onClick={onClose}
+            className="text-sm px-4 py-1.5 rounded-xl transition font-medium text-zinc-500 hover:text-zinc-200 cursor-pointer"
+            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+          >
+            Close
+          </button>
           <button
             onClick={onClose}
             className="text-sm px-5 py-1.5 rounded-xl transition font-medium text-white cursor-pointer"
