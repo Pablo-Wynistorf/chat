@@ -8,7 +8,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   useEffect(() => {
     if (prevCenteredRef.current && !centered) {
       setAnimating(true);
-      const timer = setTimeout(() => setAnimating(false), 500);
+      const timer = setTimeout(() => setAnimating(false), 3000);
       return () => clearTimeout(timer);
     }
     prevCenteredRef.current = centered;
@@ -107,26 +107,80 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
     </>
   );
 
+  // Measure the docked bar's inner content position so we can animate to it precisely
+  const dockedRef = useRef(null);
+  const dockedInnerRef = useRef(null);
+  const overlayInnerRef = useRef(null);
+
+  // When animation starts, measure the docked target and set the overlay's end position via CSS custom properties
+  useEffect(() => {
+    if (animating && dockedInnerRef.current && overlayInnerRef.current) {
+      // Wait a frame so the docked bar is laid out (even though it's opacity:0)
+      requestAnimationFrame(() => {
+        const docked = dockedInnerRef.current?.getBoundingClientRect();
+        const overlay = overlayInnerRef.current?.getBoundingClientRect();
+        if (docked && overlay) {
+          const deltaY = docked.top - overlay.top;
+          overlayInnerRef.current.style.transition = 'transform 3s cubic-bezier(0.22, 1, 0.36, 1)';
+          overlayInnerRef.current.style.transform = `translateY(${deltaY}px)`;
+        }
+      });
+    }
+  }, [animating]);
+
   if (centered) {
     return (
       <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div style={{ width: '100%', maxWidth: 740, padding: '0 16px', pointerEvents: 'auto' }}>
-          {inputContent}
+        <div className="p-3 sm:p-4" style={{ width: '100%', pointerEvents: 'auto' }}>
+          <div className="max-w-[740px] mx-auto">
+            {inputContent}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      className={`shrink-0 relative z-10 ${animating ? 'animate-input-dock' : ''}`}
-      style={{ background: 'rgba(12,12,14,0.6)', backdropFilter: 'blur(16px)' }}
-    >
-      <div className="p-3 sm:p-4">
-        <div className="max-w-[740px] mx-auto">
-          {inputContent}
+    <>
+      {/* Floating overlay that animates from center to docked position */}
+      {animating && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            ref={overlayInnerRef}
+            className="p-3 sm:p-4"
+            style={{ width: '100%', pointerEvents: 'auto', transform: 'translateY(0)' }}
+          >
+            <div className="max-w-[740px] mx-auto">
+              {inputContent}
+            </div>
+          </div>
+        </div>
+      )}
+      <div
+        ref={dockedRef}
+        className="shrink-0 relative z-10"
+        style={{
+          background: 'rgba(12,12,14,0.6)',
+          backdropFilter: 'blur(16px)',
+          opacity: animating ? 0 : 1,
+        }}
+      >
+        <div ref={dockedInnerRef} className="p-3 sm:p-4">
+          <div className="max-w-[740px] mx-auto">
+            {inputContent}
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

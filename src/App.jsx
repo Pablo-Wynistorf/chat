@@ -293,15 +293,36 @@ export default function App() {
   }, [chat]);
 
   const showEmptyState = !chat.streaming && (!chat.activeChat?.messages?.filter(m => m.role !== 'system').length);
+  const [bgVisible, setBgVisible] = useState(showEmptyState);
+  const [bgFading, setBgFading] = useState(false);
+
+  // When showEmptyState becomes false, trigger fade-out; when true again, show immediately
+  useEffect(() => {
+    if (showEmptyState) {
+      setBgVisible(true);
+      setBgFading(false);
+    } else if (bgVisible) {
+      setBgFading(true);
+      const timer = setTimeout(() => {
+        setBgVisible(false);
+        setBgFading(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [showEmptyState]);
 
   return (
     <div className="h-full flex overflow-hidden relative">
-      {showEmptyState && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+      {bgVisible && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none',
+          opacity: bgFading ? 0 : 1,
+          transition: 'opacity 3s ease-out',
+        }}>
           <ColorBends
             colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
             rotation={0}
-            speed={0.2}
+            speed={0.08}
             scale={1}
             frequency={1}
             warpStrength={1}
