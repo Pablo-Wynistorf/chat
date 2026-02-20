@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { getCfgValue, setCfgValue } from '../lib/storage';
+import { saveUserSettings } from '../lib/api';
 import GradientText from './reactbits/GradientText';
 
-export default function Settings({ open, onClose, onDeleteAll }) {
+export default function Settings({ open, onClose, onDeleteAll, onLogout }) {
   const [endpoint, setEndpoint] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [system, setSystem] = useState('');
@@ -17,7 +18,21 @@ export default function Settings({ open, onClose, onDeleteAll }) {
     setTemp(parseFloat(getCfgValue('temp') || '1'));
   }, [open]);
 
-  const save = (key, val) => { setCfgValue(key, val); };
+  const save = (key, val) => {
+    setCfgValue(key, val);
+    // Debounced sync to DynamoDB
+    clearTimeout(window.__settingsSyncTimer);
+    window.__settingsSyncTimer = setTimeout(() => {
+      saveUserSettings({
+        endpoint: getCfgValue('endpoint'),
+        apiKey: getCfgValue('apikey'),
+        systemPrompt: getCfgValue('system'),
+        maxTokens: parseInt(getCfgValue('maxtokens')) || 4096,
+        temperature: parseFloat(getCfgValue('temp') || '1'),
+        selectedModel: getCfgValue('model'),
+      }).catch(() => {});
+    }, 1000);
+  };
 
   if (!open) return null;
 
@@ -57,13 +72,13 @@ export default function Settings({ open, onClose, onDeleteAll }) {
 
         {/* Body */}
         <div className="p-5 space-y-3 overflow-y-auto">
-          <Field label="API Endpoint" tip="Base URL of your gateway">
+          <Field label="API Endpoint" tip="Base URL of your AI provider (e.g. OpenAI, Anthropic gateway). Requests are proxied through the backend.">
             <input value={endpoint} onChange={e => { setEndpoint(e.target.value); save('endpoint', e.target.value); }}
               placeholder="https://xxx.execute-api.region.amazonaws.com/v1"
               className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50"
               style={inputStyle} />
           </Field>
-          <Field label="API Key" tip="Secret key for auth. Sent as Bearer token.">
+          <Field label="API Key" tip="Secret key for your AI provider. Stored encrypted in your account.">
             <input type="password" value={apiKey} onChange={e => { setApiKey(e.target.value); save('apikey', e.target.value); }}
               placeholder="Your API key"
               className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50"
@@ -112,15 +127,26 @@ export default function Settings({ open, onClose, onDeleteAll }) {
 
         {/* Footer */}
         <div className="px-5 py-3 flex justify-between items-center shrink-0" style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-          <button
-            onClick={onClose}
-            className="text-sm px-4 py-1.5 rounded-xl transition font-medium text-zinc-500 hover:text-zinc-200 cursor-pointer"
-            style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
-            onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-            onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
-          >
-            Close
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="text-sm px-4 py-1.5 rounded-xl transition font-medium text-zinc-500 hover:text-zinc-200 cursor-pointer"
+              style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.04)'}
+            >
+              Close
+            </button>
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="text-sm px-4 py-1.5 rounded-xl transition font-medium text-red-400 hover:text-red-300 cursor-pointer"
+                style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="text-sm px-5 py-1.5 rounded-xl transition font-medium text-white cursor-pointer"

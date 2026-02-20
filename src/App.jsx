@@ -1,6 +1,9 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChat } from './hooks/useChat';
 import { streamChat, getConfig } from './lib/stream';
+import { getUser, logout } from './lib/auth';
+import { loadUserSettings, saveUserSettings } from './lib/api';
+import { setCfgValue, getCfgValue } from './lib/storage';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import ModelPicker from './components/ModelPicker';
@@ -8,6 +11,7 @@ import MessageArea from './components/MessageArea';
 import InputBar from './components/InputBar';
 import ConfirmModal from './components/ConfirmModal';
 import ToastContainer from './components/Toast';
+import AuthScreen from './components/AuthScreen';
 import ColorBends from './components/reactbits/ColorBends';
 
 // ── URL helpers: use /c/<uuid> paths, with ?c=<uuid> fallback for GitHub Pages 404 redirect ──
@@ -30,11 +34,56 @@ function replaceChatUrl(id) {
 }
 
 export default function App() {
+  const [authed, setAuthed] = useState(null); // null = loading, false = not authed, true = authed
+
+  useEffect(() => {
+    getUser().then(u => setAuthed(!!u)).catch(() => setAuthed(false));
+  }, []);
+
+  const handleAuth = useCallback(() => {
+    setAuthed(true);
+  }, []);
+
+  if (authed === null) {
+    return <div className="h-full flex items-center justify-center text-zinc-500 text-sm">Loading...</div>;
+  }
+  if (!authed) {
+    return <AuthScreen onAuth={handleAuth} />;
+  }
+
+  return <AuthedApp onLogout={() => { logout(); setAuthed(false); }} />;
+}
+
+function AuthedApp({ onLogout }) {
   const chat = useChat();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(() => {
-    return !localStorage.getItem('chat-endpoint') || !localStorage.getItem('chat-apikey');
-  });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+
+  // Load user settings from DynamoDB on mount, then decide if settings modal should open
+  useEffect(() => {
+    loadUserSettings().then(s => {
+      if (s) {
+        if (s.endpoint) setCfgValue('endpoint', s.endpoint);
+        if (s.apiKey) setCfgValue('apikey', s.apiKey);
+        if (s.systemPrompt) setCfgValue('system', s.systemPrompt);
+        if (s.maxTokens) setCfgValue('maxtokens', String(s.maxTokens));
+        if (s.temperature != null) setCfgValue('temp', String(s.temperature));
+        if (s.selectedModel) setCfgValue('model', s.selectedModel);
+      }
+      // Open settings if no endpoint/apiKey configured (from DynamoDB or localStorage)
+      const ep = getCfgValue('endpoint');
+      const ak = getCfgValue('apikey');
+      if (!ep || !ak) setSettingsOpen(true);
+      setSettingsLoaded(true);
+    }).catch(() => {
+      // Fallback to localStorage check
+      const ep = getCfgValue('endpoint');
+      const ak = getCfgValue('apikey');
+      if (!ep || !ak) setSettingsOpen(true);
+      setSettingsLoaded(true);
+    });
+  }, []);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteAllOpen, setDeleteAllOpen] = useState(false);
   const [streamContent, setStreamContent] = useState('');
@@ -361,7 +410,7 @@ export default function App() {
         />
       </main>
 
-      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} onDeleteAll={handleDeleteAll} />
+      <Settings open={settingsOpen} onClose={() => setSettingsOpen(false)} onDeleteAll={handleDeleteAll} onLogout={onLogout} />
       <ConfirmModal open={!!deleteTarget} title="Delete chat?" message="This will permanently delete this conversation." onConfirm={confirmDeleteChat} onCancel={() => setDeleteTarget(null)} />
       <ConfirmModal open={deleteAllOpen} title="Delete all chats?" message="This will permanently delete all conversations. This action cannot be undone." confirmLabel="Delete All" onConfirm={confirmDeleteAll} onCancel={() => setDeleteAllOpen(false)} />
       <ToastContainer />

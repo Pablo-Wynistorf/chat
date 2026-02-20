@@ -1,27 +1,40 @@
 import { useState, useEffect, useRef } from 'react';
 import { getCfgValue, setCfgValue } from '../lib/storage';
 import { fetchModels, getConfig } from '../lib/stream';
+import { saveUserSettings } from '../lib/api';
 
 export default function ModelPicker() {
   const [open, setOpen] = useState(false);
   const [models, setModels] = useState([]);
   const [search, setSearch] = useState('');
-  const [current, setCurrent] = useState(getCfgValue('model') || 'global.anthropic.claude-opus-4-6-v1');
+  const [current, setCurrent] = useState(getCfgValue('model') || '');
   const ref = useRef(null);
+  const fetchedRef = useRef(false);
 
+  // Re-read current model from localStorage when it may have been updated by settings load
   useEffect(() => {
+    const interval = setInterval(() => {
+      const m = getCfgValue('model');
+      if (m && m !== current) setCurrent(m);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [current]);
+
+  // Fetch models once endpoint/apiKey are available
+  useEffect(() => {
+    if (fetchedRef.current) return;
     const { endpoint, apiKey } = getConfig();
-    if (endpoint && apiKey) {
-      fetchModels(endpoint, apiKey).then(m => {
-        setModels(m);
-        if (!getCfgValue('model') && m.length) {
-          const def = m.find(x => x.includes('opus-4-6')) || m.find(x => x.includes('claude')) || m[0];
-          setCfgValue('model', def);
-          setCurrent(def);
-        }
-      }).catch(() => {});
-    }
-  }, []);
+    if (!endpoint || !apiKey) return;
+    fetchedRef.current = true;
+    fetchModels(endpoint, apiKey).then(m => {
+      setModels(m);
+      if (!getCfgValue('model') && m.length) {
+        const def = m.find(x => x.includes('claude')) || m[0];
+        setCfgValue('model', def);
+        setCurrent(def);
+      }
+    }).catch(() => {});
+  });
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
@@ -35,6 +48,15 @@ export default function ModelPicker() {
     setCfgValue('model', id);
     setCurrent(id);
     setOpen(false);
+    // Sync to DynamoDB
+    saveUserSettings({
+      endpoint: getCfgValue('endpoint'),
+      apiKey: getCfgValue('apikey'),
+      systemPrompt: getCfgValue('system'),
+      maxTokens: parseInt(getCfgValue('maxtokens')) || 4096,
+      temperature: parseFloat(getCfgValue('temp') || '1'),
+      selectedModel: id,
+    }).catch(() => {});
   };
 
   return (
@@ -74,7 +96,7 @@ export default function ModelPicker() {
             {filtered.length === 0 && <div className="p-4 text-center text-sm text-zinc-600">No models found</div>}
             {filtered.map(id => (
               <div key={id} onClick={() => select(id)}
-                className={`px-3.5 py-2.5 cursor-pointer transition text-[13px]`}
+                className="px-3.5 py-2.5 cursor-pointer transition text-[13px]"
                 style={{ background: id === current ? 'rgba(124,92,252,0.1)' : 'transparent' }}
                 onMouseEnter={e => { if (id !== current) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
                 onMouseLeave={e => { e.currentTarget.style.background = id === current ? 'rgba(124,92,252,0.1)' : 'transparent'; }}
