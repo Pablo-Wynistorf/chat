@@ -1,9 +1,17 @@
-// This handler is used for non-streaming requests (fetchModels)
-// via the HTTP API Gateway route.
-// Streaming chat is handled by the streaming Lambda (chat-stream).
+// Non-streaming proxy handler (fetchModels, non-streaming chat)
+// Adapts requests to Anthropic, Google Gemini, OpenAI, and any OpenAI-compatible API.
 import type { APIGatewayProxyEventV2WithJWTAuthorizer } from 'aws-lambda';
+import {
+  detectProvider,
+  buildModelsUrl,
+  buildModelsHeaders,
+  normalizeModelsResponse,
+  buildHeaders,
+  buildChatUrl,
+  buildChatBody,
+} from '../shared/providers';
 
-/** Decode JWT payload and check for a role in the `roles` or `custom:roles` claim. */
+/** Decode JWT payload and check for a role claim. */
 function hasRequiredRole(jwt: string, role: string): boolean {
   try {
     const parts = jwt.split('.');
@@ -29,7 +37,6 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) =>
     return { statusCode: 200, headers: corsHeaders(), body: '' };
   }
 
-  // ── Role check: verify chatUser role from Cognito JWT ──
   const authHeader = event.headers?.['authorization'] || '';
   const token = authHeader.replace(/^Bearer\s+/i, '');
   if (!token || !hasRequiredRole(token, 'chatUser')) {
@@ -44,30 +51,36 @@ export const handler = async (event: APIGatewayProxyEventV2WithJWTAuthorizer) =>
       return respond(400, { error: 'Missing endpoint or apiKey' });
     }
 
+    const provider = detectProvider(endpoint);
+
     // Fetch models list
     if (body.action === 'fetchModels') {
-      const res = await fetch(`${endpoint}/models`, {
-        headers: { Authorization: `Bearer ${apiKey}` },
-      });
-      if (!res.ok) return respond(res.status, { error: 'Failed to fetch models' });
+      const url = buildModelsUrl(provider, endpoint, apiKey);
+      const headers = buildModelsHeaders(provider, apiKey);
+      const res = await fetch(url, { headers });
+      if (!res.ok) {
+        const errText = await res.text();
+        return respond(res.status, { error: errText || 'Failed to fetch models' });
+      }
       const json = await res.json();
-      return respond(200, json);
+      return respond(200, normalizeModelsResponse(provider, json));
     }
 
     // Non-streaming chat completion
-    const apiRes = await fetch(`${endpoint}/chat/completions`, {
+    const chatUrl = buildChatUrl(provider, endpoint, body.model, apiKey);
+    const chatHeaders = buildHeaders(provider, apiKey);
+    const chatBody = buildChatBody(provider, {
+      model: body.model,
+      messages: body.messages,
+      max_tokens: body.max_tokens,
+      temperature: body.temperature,
+      stream: false,
+    });
+
+    const apiRes = await fetch(chatUrl, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: body.model,
-        messages: body.messages,
-        max_tokens: body.max_tokens,
-        temperature: body.temperature,
-        stream: false,
-      }),
+      headers: chatHeaders,
+      body: JSON.stringify(chatBody),
     });
 
     if (!apiRes.ok) {

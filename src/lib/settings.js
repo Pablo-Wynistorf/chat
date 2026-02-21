@@ -1,14 +1,13 @@
 // Settings state — lives in memory, persisted to DynamoDB only.
-// No localStorage for sensitive data (endpoint, apiKey, etc.)
 
 let _settings = {
-  endpoint: '',
-  apiKey: '',
+  providers: [],       // Array of { id, name, endpoint, apiKey }
+  selectedProvider: '', // provider id
+  selectedModel: '',
   systemPrompt: '',
   maxTokens: 4096,
   temperature: 1,
-  selectedModel: '',
-  mcpServers: [], // Array of { name, url, headers?: {}, enabled: boolean }
+  mcpServers: [],
 };
 
 const _listeners = new Set();
@@ -29,4 +28,10 @@ export function updateSettings(partial) {
 export function onSettingsChange(fn) {
   _listeners.add(fn);
   return () => _listeners.delete(fn);
+}
+
+/** Get the active provider config, or null */
+export function getActiveProvider() {
+  const p = _settings.providers.find(p => p.id === _settings.selectedProvider);
+  return p || _settings.providers[0] || null;
 }

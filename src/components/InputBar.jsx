@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import { getSettings, onSettingsChange } from '../lib/settings';
+import { countTokens, calculateCost, formatCost } from '../lib/pricing';
 
-export default function InputBar({ onSend, onStop, streaming, centered }) {
+export default function InputBar({ onSend, onStop, streaming, centered, messages }) {
   const [animating, setAnimating] = useState(false);
 
   // When transitioning from centered to docked, trigger animation
@@ -18,6 +20,29 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
   const barRef = useRef(null);
+
+  // Token counting & cost estimation
+  const [model, setModel] = useState('');
+  const [maxTokens, setMaxTokens] = useState(4096);
+  useEffect(() => {
+    const s = getSettings();
+    setModel(s.selectedModel || '');
+    setMaxTokens(s.maxTokens || 4096);
+    return onSettingsChange(s => {
+      setModel(s.selectedModel || '');
+      setMaxTokens(s.maxTokens || 4096);
+    });
+  }, []);
+
+  const tokenInfo = useMemo(() => {
+    // Build the messages array including the current draft
+    const msgs = [...(messages || [])];
+    if (text.trim()) msgs.push({ role: 'user', content: text });
+    if (msgs.length === 0) return null;
+    const inputTokens = countTokens(msgs);
+    const cost = calculateCost(inputTokens, maxTokens, model);
+    return { inputTokens, cost };
+  }, [messages, text, model, maxTokens]);
 
   const resize = () => {
     const el = textareaRef.current;
@@ -157,6 +182,18 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
           )}
         </button>
       </div>
+      {tokenInfo && (
+        <div className="flex items-center justify-end gap-3 px-1 pt-1.5 text-[11px] text-zinc-600">
+          <span>{tokenInfo.inputTokens.toLocaleString()} input tokens</span>
+          {tokenInfo.cost && (
+            <>
+              <span>Input: {formatCost(tokenInfo.cost.inputCost)}</span>
+              <span>Max output: {formatCost(tokenInfo.cost.maxOutputCost)}</span>
+              <span className="text-zinc-500">Total: {formatCost(tokenInfo.cost.totalCost)}</span>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 

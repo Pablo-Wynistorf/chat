@@ -4,6 +4,16 @@ import { streamChat, getConfig } from './lib/stream';
 import { getUser, logout, hasRole } from './lib/auth';
 import { loadUserSettings } from './lib/api';
 import { updateSettings, getSettings } from './lib/settings';
+
+function guessProviderName(endpoint) {
+  const lower = (endpoint || '').toLowerCase();
+  if (lower.includes('anthropic')) return 'Anthropic';
+  if (lower.includes('openai.com')) return 'OpenAI';
+  if (lower.includes('googleapis') || lower.includes('gemini')) return 'Google Gemini';
+  if (lower.includes('x.ai') || lower.includes('grok')) return 'xAI';
+  if (lower.includes('deepseek')) return 'DeepSeek';
+  try { return new URL(endpoint).hostname; } catch { return 'Provider'; }
+}
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import ModelPicker from './components/ModelPicker';
@@ -69,9 +79,17 @@ function AuthedApp({ onLogout }) {
   useEffect(() => {
     loadUserSettings().then(s => {
       if (s) {
+        // Migrate from old single-provider format if needed
+        let providers = [];
+        if (s.providers) {
+          providers = typeof s.providers === 'string' ? JSON.parse(s.providers) : s.providers;
+        } else if (s.endpoint && s.apiKey) {
+          // Legacy migration: convert single endpoint/apiKey to a provider entry
+          providers = [{ id: crypto.randomUUID(), name: guessProviderName(s.endpoint), endpoint: s.endpoint, apiKey: s.apiKey }];
+        }
         updateSettings({
-          endpoint: s.endpoint || '',
-          apiKey: s.apiKey || '',
+          providers,
+          selectedProvider: s.selectedProvider || (providers[0]?.id || ''),
           systemPrompt: s.systemPrompt || '',
           maxTokens: s.maxTokens || 4096,
           temperature: s.temperature ?? 1,
@@ -80,7 +98,7 @@ function AuthedApp({ onLogout }) {
         });
       }
       const current = getSettings();
-      if (!current.endpoint || !current.apiKey) setSettingsOpen(true);
+      if (!current.providers || current.providers.length === 0) setSettingsOpen(true);
       setSettingsLoaded(true);
     }).catch(() => {
       setSettingsOpen(true);
@@ -428,6 +446,7 @@ function AuthedApp({ onLogout }) {
           onStop={chat.stopStreaming}
           streaming={chat.streaming}
           centered={showEmptyState}
+          messages={chat.activeChat?.messages || []}
         />
       </main>
 

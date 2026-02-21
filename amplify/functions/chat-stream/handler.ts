@@ -1,6 +1,14 @@
 // Streaming Lambda handler — invoked via API Gateway REST API with ResponseTransferMode: STREAM.
-// Auth is handled by the Cognito User Pools authorizer on API Gateway.
-// The in-code role check below is defense-in-depth.
+// Adapts requests to Anthropic, Google Gemini, OpenAI, and any OpenAI-compatible API.
+// Always returns OpenAI-compatible SSE format to the frontend.
+
+import {
+  detectProvider,
+  buildHeaders,
+  buildChatUrl,
+  buildChatBody,
+  normalizeSSELine,
+} from '../shared/providers';
 
 declare const awslambda: {
   streamifyResponse: (handler: any) => any;
@@ -9,7 +17,7 @@ declare const awslambda: {
   };
 };
 
-/** Decode JWT payload and check for a role in the `roles` or `custom:roles` claim. */
+/** Decode JWT payload and check for a role claim. */
 function hasRequiredRole(jwt: string, role: string): boolean {
   try {
     const parts = jwt.split('.');
@@ -32,7 +40,6 @@ function hasRequiredRole(jwt: string, role: string): boolean {
 
 export const handler = awslambda.streamifyResponse(
   async (event: any, responseStream: any, _context: any) => {
-    // ── Role check: verify chatUser role from Cognito/OIDC token ──
     const authHeader = event.headers?.['authorization'] || event.headers?.['Authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token || !hasRequiredRole(token, 'chatUser')) {
@@ -70,21 +77,24 @@ export const handler = awslambda.streamifyResponse(
       return;
     }
 
+    const provider = detectProvider(endpoint);
+
     try {
-      const apiRes = await fetch(`${endpoint}/chat/completions`, {
+      const chatUrl = buildChatUrl(provider, endpoint, model, apiKey);
+      const chatHeaders = buildHeaders(provider, apiKey);
+      const chatBody = buildChatBody(provider, {
+        model,
+        messages,
+        max_tokens,
+        temperature,
+        stream: true,
+        mcp_servers,
+      });
+
+      const apiRes = await fetch(chatUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens,
-          temperature,
-          stream: true,
-          ...(mcp_servers && mcp_servers.length > 0 ? { mcp_servers } : {}),
-        }),
+        headers: chatHeaders,
+        body: JSON.stringify(chatBody),
       });
 
       if (!apiRes.ok) {
@@ -107,13 +117,36 @@ export const handler = awslambda.streamifyResponse(
         },
       });
 
-      const reader = apiRes.body!.getReader();
-      const decoder = new TextDecoder();
+      // For OpenAI-compatible providers, pass through raw SSE (already correct format)
+      if (provider === 'openai-compat') {
+        const reader = apiRes.body!.getReader();
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          outStream.write(decoder.decode(value, { stream: true }));
+        }
+      } else {
+        // For Anthropic/Google, parse SSE lines and normalize to OpenAI format
+        const reader = apiRes.body!.getReader();
+        const decoder = new TextDecoder();
+        let sseBuffer = '';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        outStream.write(decoder.decode(value, { stream: true }));
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          sseBuffer += decoder.decode(value, { stream: true });
+          const lines = sseBuffer.split('\n');
+          sseBuffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            const data = line.slice(6).trim();
+            if (!data) continue;
+            const normalized = normalizeSSELine(provider, data);
+            if (normalized) outStream.write(normalized + '\n\n');
+          }
+        }
       }
 
       outStream.end();

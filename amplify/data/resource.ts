@@ -3,13 +3,13 @@ import { type ClientSchema, a, defineData } from '@aws-amplify/backend';
 const schema = a.schema({
   UserSettings: a
     .model({
-      endpoint: a.string(),
-      apiKey: a.string(),
+      providers: a.string(),     // JSON array of { id, name, endpoint, apiKey }
+      selectedProvider: a.string(),
       systemPrompt: a.string(),
       maxTokens: a.integer().default(4096),
       temperature: a.float().default(1),
       selectedModel: a.string(),
-      mcpServers: a.string(), // JSON-stringified array of MCP server configs
+      mcpServers: a.string(),    // JSON array of MCP server configs
     })
     .authorization((allow) => [allow.owner()]),
 

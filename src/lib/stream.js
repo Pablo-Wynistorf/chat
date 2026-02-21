@@ -1,11 +1,12 @@
-import { getSettings } from './settings';
+import { getSettings, getActiveProvider } from './settings';
 import { streamChatViaLambda, fetchModelsViaLambda } from './api';
 
 export function getConfig() {
   const s = getSettings();
+  const provider = getActiveProvider();
   return {
-    endpoint: (s.endpoint || '').replace(/\/$/, ''),
-    apiKey: s.apiKey || '',
+    endpoint: (provider?.endpoint || '').replace(/\/$/, ''),
+    apiKey: provider?.apiKey || '',
     model: s.selectedModel || '',
     system: s.systemPrompt || '',
     maxTokens: Math.min(s.maxTokens || 4096, 65536),
@@ -29,7 +30,6 @@ export async function streamChat(chat, abortController, onDelta, onDone, onToolC
     return { role: m.role, content: msgText };
   });
 
-  // Build mcp_servers payload for the gateway
   const mcpPayload = mcpServers.map(s => ({
     url: s.url,
     name: s.name || undefined,
