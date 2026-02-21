@@ -13,6 +13,9 @@ export const auth = defineAuth({
           scopes: ['openid', 'email', 'profile'],
           attributeMapping: {
             email: 'email',
+            custom: {
+              'custom:roles': 'roles',
+            },
           },
         },
       ],

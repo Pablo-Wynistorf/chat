@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChat } from './hooks/useChat';
 import { streamChat, getConfig } from './lib/stream';
-import { getUser, logout } from './lib/auth';
+import { getUser, logout, hasRole } from './lib/auth';
 import { loadUserSettings } from './lib/api';
 import { updateSettings, getSettings } from './lib/settings';
 import Sidebar from './components/Sidebar';
@@ -34,14 +34,23 @@ function replaceChatUrl(id) {
 }
 
 export default function App() {
-  const [authed, setAuthed] = useState(null); // null = loading, false = not authed, true = authed
+  const [authed, setAuthed] = useState(null); // null = loading, false = not authed, 'denied' = no role, true = authed
 
   useEffect(() => {
-    getUser().then(u => setAuthed(!!u)).catch(() => setAuthed(false));
+    getUser()
+      .then(async (u) => {
+        if (!u) { setAuthed(false); return; }
+        const allowed = await hasRole('chatUser');
+        setAuthed(allowed ? true : 'denied');
+      })
+      .catch(() => setAuthed(false));
   }, []);
 
   if (authed === null) {
     return <div className="h-full flex items-center justify-center text-zinc-500 text-sm">Loading...</div>;
+  }
+  if (authed === 'denied') {
+    return <AccessDenied onLogout={() => { logout(); setAuthed(false); }} />;
   }
   if (!authed) {
     return <AuthScreen />;
@@ -419,4 +428,35 @@ function getRealIndex(chat, displayIdx) {
     if (count === displayIdx) return i;
   }
   return displayIdx;
+}
+
+function AccessDenied({ onLogout }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center" style={{ background: 'rgba(8,8,10,0.95)' }}>
+      <div className="w-[92vw] max-w-sm rounded-2xl shadow-2xl shadow-black/60 p-6 text-center"
+        style={{
+          background: 'rgba(16, 16, 20, 0.65)',
+          backdropFilter: 'blur(32px)',
+          WebkitBackdropFilter: 'blur(32px)',
+          border: '1px solid rgba(255,255,255,0.08)',
+        }}>
+        <div className="text-red-400 mb-3">
+          <svg className="w-10 h-10 mx-auto" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+          </svg>
+        </div>
+        <h2 className="text-lg font-semibold text-zinc-200 mb-1">Access Denied</h2>
+        <p className="text-zinc-500 text-sm mb-5">Your account does not have the required role to use this app.</p>
+        <button
+          onClick={onLogout}
+          className="w-full py-2.5 rounded-xl text-sm font-medium text-white transition cursor-pointer"
+          style={{ background: 'rgba(124,92,252,0.8)', border: '1px solid rgba(124,92,252,0.4)' }}
+          onMouseEnter={e => e.currentTarget.style.background = 'rgba(124,92,252,1)'}
+          onMouseLeave={e => e.currentTarget.style.background = 'rgba(124,92,252,0.8)'}
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
 }

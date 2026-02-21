@@ -8,8 +8,42 @@ declare const awslambda: {
   };
 };
 
+/** Decode JWT payload and check for a role in the `roles` or `custom:roles` claim. */
+function hasRequiredRole(jwt: string, role: string): boolean {
+  try {
+    const parts = jwt.split('.');
+    if (parts.length !== 3) return false;
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+    const roles = payload['roles'] || payload['custom:roles'] || '';
+    if (Array.isArray(roles)) return roles.includes(role);
+    if (typeof roles === 'string') {
+      try {
+        const parsed = JSON.parse(roles);
+        if (Array.isArray(parsed)) return parsed.includes(role);
+      } catch { /* comma-separated fallback */ }
+      return roles.split(',').map((r: string) => r.trim()).includes(role);
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 export const handler = awslambda.streamifyResponse(
   async (event: any, responseStream: any, _context: any) => {
+    // ── Role check: verify chatUser role from Cognito/OIDC token ──
+    const authHeader = event.headers?.['authorization'] || event.headers?.['Authorization'] || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '');
+    if (!token || !hasRequiredRole(token, 'chatUser')) {
+      const errStream = awslambda.HttpResponseStream.from(responseStream, {
+        statusCode: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      errStream.write(JSON.stringify({ error: 'Forbidden: missing chatUser role' }));
+      errStream.end();
+      return;
+    }
+
     let body: any;
     try {
       body = JSON.parse(event.body || '{}');
