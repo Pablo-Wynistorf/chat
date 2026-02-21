@@ -8,6 +8,7 @@ let _settings = {
   maxTokens: 4096,
   temperature: 1,
   selectedModel: '',
+  mcpServers: [], // Array of { name, url, headers?: {}, enabled: boolean }
 };
 
 const _listeners = new Set();

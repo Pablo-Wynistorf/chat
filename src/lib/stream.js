@@ -10,11 +10,12 @@ export function getConfig() {
     system: s.systemPrompt || '',
     maxTokens: Math.min(s.maxTokens || 4096, 65536),
     temperature: s.temperature ?? 1,
+    mcpServers: (s.mcpServers || []).filter(s => s.enabled),
   };
 }
 
-export async function streamChat(chat, abortController, onDelta, onDone) {
-  const { endpoint, apiKey, model, maxTokens, temperature } = getConfig();
+export async function streamChat(chat, abortController, onDelta, onDone, onToolCall) {
+  const { endpoint, apiKey, model, maxTokens, temperature, mcpServers } = getConfig();
 
   const messages = chat.messages.map(m => {
     const msgText = m.fileContent
@@ -28,11 +29,19 @@ export async function streamChat(chat, abortController, onDelta, onDone) {
     return { role: m.role, content: msgText };
   });
 
+  // Build mcp_servers payload for the gateway
+  const mcpPayload = mcpServers.map(s => ({
+    url: s.url,
+    name: s.name || undefined,
+    headers: (s.headers && Object.keys(s.headers).length > 0) ? s.headers : undefined,
+  }));
+
   await streamChatViaLambda(
-    { endpoint, apiKey, messages, model, maxTokens, temperature },
+    { endpoint, apiKey, messages, model, maxTokens, temperature, mcpServers: mcpPayload },
     abortController,
     onDelta,
     onDone,
+    onToolCall,
   );
 }
 

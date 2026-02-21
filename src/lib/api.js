@@ -138,26 +138,33 @@ export async function fetchModelsViaLambda(endpoint, apiKey) {
 
 // ── Stream chat via Lambda Function URL ──
 export async function streamChatViaLambda(
-  { endpoint, apiKey, messages, model, maxTokens, temperature },
+  { endpoint, apiKey, messages, model, maxTokens, temperature, mcpServers },
   abortController,
   onDelta,
   onDone,
+  onToolCall,
 ) {
   const token = await getIdToken();
+
+  const payload = {
+    endpoint,
+    apiKey,
+    messages,
+    model,
+    max_tokens: maxTokens,
+    temperature,
+  };
+  if (mcpServers && mcpServers.length > 0) {
+    payload.mcp_servers = mcpServers;
+  }
+
   const res = await fetch(_streamUrl, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({
-      endpoint,
-      apiKey,
-      messages,
-      model,
-      max_tokens: maxTokens,
-      temperature,
-    }),
+    body: JSON.stringify(payload),
     signal: abortController.signal,
   });
 
@@ -171,6 +178,9 @@ export async function streamChatViaLambda(
   let buffer = '';
   let fullText = '';
   let stopReason = null;
+
+  // Track active tool calls by index
+  const activeToolCalls = {};
 
   while (true) {
     const { done, value } = await reader.read();
@@ -186,8 +196,45 @@ export async function streamChatViaLambda(
       try {
         const parsed = JSON.parse(data);
         const choice = parsed.choices?.[0];
-        const delta = choice?.delta?.content;
-        if (choice?.finish_reason === 'length') stopReason = 'length';
+        if (!choice) continue;
+
+        // Handle tool call deltas
+        if (choice.delta?.tool_calls) {
+          for (const tc of choice.delta.tool_calls) {
+            const idx = tc.index ?? 0;
+            if (tc.id) {
+              // New tool call starting
+              activeToolCalls[idx] = {
+                id: tc.id,
+                name: tc.function?.name || '',
+                arguments: tc.function?.arguments || '',
+              };
+              if (onToolCall) onToolCall({ type: 'start', ...activeToolCalls[idx] });
+            } else if (activeToolCalls[idx]) {
+              // Argument chunk
+              activeToolCalls[idx].arguments += tc.function?.arguments || '';
+            }
+          }
+        }
+
+        // Handle finish_reason: tool_calls — mark tool calls as executing
+        if (choice.finish_reason === 'tool_calls') {
+          for (const idx of Object.keys(activeToolCalls)) {
+            if (onToolCall) onToolCall({ type: 'executing', ...activeToolCalls[idx] });
+          }
+        }
+
+        // Handle new assistant turn after tool execution (role: assistant in delta)
+        if (choice.delta?.role === 'assistant' && Object.keys(activeToolCalls).length > 0) {
+          for (const idx of Object.keys(activeToolCalls)) {
+            if (onToolCall) onToolCall({ type: 'done', ...activeToolCalls[idx] });
+          }
+          // Reset for next round
+          for (const k of Object.keys(activeToolCalls)) delete activeToolCalls[k];
+        }
+
+        const delta = choice.delta?.content;
+        if (choice.finish_reason === 'length') stopReason = 'length';
         if (delta) {
           fullText += delta;
           onDelta(fullText);
@@ -196,6 +243,11 @@ export async function streamChatViaLambda(
         /* skip */
       }
     }
+  }
+
+  // Mark any remaining tool calls as done
+  for (const idx of Object.keys(activeToolCalls)) {
+    if (onToolCall) onToolCall({ type: 'done', ...activeToolCalls[idx] });
   }
 
   onDone(fullText, stopReason);

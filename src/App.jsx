@@ -76,6 +76,7 @@ function AuthedApp({ onLogout }) {
           maxTokens: s.maxTokens || 4096,
           temperature: s.temperature ?? 1,
           selectedModel: s.selectedModel || '',
+          mcpServers: s.mcpServers ? (typeof s.mcpServers === 'string' ? JSON.parse(s.mcpServers) : s.mcpServers) : [],
         });
       }
       const current = getSettings();
@@ -91,6 +92,7 @@ function AuthedApp({ onLogout }) {
   const [streamContent, setStreamContent] = useState('');
   const [showContinue, setShowContinue] = useState(false);
   const [continuing, setContinuing] = useState(false);
+  const [toolCalls, setToolCalls] = useState([]);
   const streamContentRef = useRef('');
 
   const updateStreamContent = useCallback((val) => {
@@ -144,7 +146,23 @@ function AuthedApp({ onLogout }) {
     updateStreamContent('');
     setShowContinue(false);
     setContinuing(false);
+    setToolCalls([]);
     chat.abortRef.current = new AbortController();
+
+    const handleToolCall = (event) => {
+      setToolCalls(prev => {
+        if (event.type === 'start') {
+          return [...prev, { id: event.id, name: event.name, status: 'calling' }];
+        }
+        if (event.type === 'executing') {
+          return prev.map(tc => tc.id === event.id ? { ...tc, status: 'executing' } : tc);
+        }
+        if (event.type === 'done') {
+          return prev.map(tc => tc.id === event.id ? { ...tc, status: 'done' } : tc);
+        }
+        return prev;
+      });
+    };
 
       try {
       await streamChat(
@@ -160,6 +178,7 @@ function AuthedApp({ onLogout }) {
           chat.setStreaming(false);
           chat.abortRef.current = null;
         },
+        handleToolCall,
       );
     } catch (err) {
       if (err.name !== 'AbortError') {
@@ -269,11 +288,6 @@ function AuthedApp({ onLogout }) {
             chat.setStreaming(false);
             chat.abortRef.current = null;
           },
-          (err) => {
-            updateStreamContent(`Error: ${err.message}`);
-            setContinuing(false);
-            chat.setStreaming(false);
-          }
         );
       } catch (err) {
         if (err.name !== 'AbortError') {
@@ -400,6 +414,7 @@ function AuthedApp({ onLogout }) {
           streaming={chat.streaming}
           streamContent={streamContent}
           continuing={continuing}
+          toolCalls={toolCalls}
           onEditSave={handleEditSave}
           onCopy={handleCopy}
           onRegenerate={handleRegenerate}

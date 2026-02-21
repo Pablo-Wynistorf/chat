@@ -57,7 +57,7 @@ export const handler = awslambda.streamifyResponse(
       return;
     }
 
-    const { endpoint, apiKey, messages, model, max_tokens, temperature } = body;
+    const { endpoint, apiKey, messages, model, max_tokens, temperature, mcp_servers } = body;
 
     if (!endpoint || !apiKey) {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
@@ -82,6 +82,7 @@ export const handler = awslambda.streamifyResponse(
           max_tokens,
           temperature,
           stream: true,
+          ...(mcp_servers && mcp_servers.length > 0 ? { mcp_servers } : {}),
         }),
       });
 

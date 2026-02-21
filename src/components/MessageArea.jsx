@@ -41,7 +41,6 @@ function handleCodeCopyClick(e, isStreaming) {
   const isIncomplete = btn.hasAttribute('data-incomplete');
 
   if (isStreaming && isIncomplete) {
-    // Queue this block — mark it so we copy when the block completes
     const pre = btn.closest('pre');
     if (!pre) return;
     const blockId = 'pending-' + Math.random().toString(36).slice(2, 8);
@@ -51,7 +50,6 @@ function handleCodeCopyClick(e, isStreaming) {
     btn.style.color = '#7c5cfc';
     showToast('Will copy when code block is complete');
   } else {
-    // Block is complete (or not streaming) — copy immediately
     copyCodeFromBtn(btn);
     btn.textContent = 'Copied!';
     btn.style.color = '#4ade80';
@@ -59,7 +57,6 @@ function handleCodeCopyClick(e, isStreaming) {
   }
 }
 
-// Called when streaming ends — copies any queued blocks
 function flushPendingCopies(containerEl) {
   if (!containerEl || pendingCopyBlocks.size === 0) return;
   containerEl.querySelectorAll('pre[data-pending-copy]').forEach(pre => {
@@ -82,11 +79,123 @@ function flushPendingCopies(containerEl) {
   pendingCopyBlocks.clear();
 }
 
+/** Strip mcp_ prefix and server name from tool names for display */
+function formatToolName(name) {
+  if (name.startsWith('mcp_')) {
+    const parts = name.split('__');
+    return parts.length > 1 ? parts.slice(1).join('__') : name;
+  }
+  return name;
+}
+
+/** Tool call status display shown above the streaming message */
+function ToolCallsDisplay({ toolCalls }) {
+  if (!toolCalls || toolCalls.length === 0) return null;
+
+  return (
+    <div className="max-w-[740px] mx-auto px-4 sm:px-5 mb-1">
+      <div className="ml-10 space-y-1">
+        {toolCalls.map((tc) => (
+          <div key={tc.id} className="flex items-center gap-2 text-xs text-zinc-500 py-1 px-2.5 rounded-lg"
+            style={{ background: 'rgba(124,92,252,0.05)', border: '1px solid rgba(124,92,252,0.1)' }}>
+            {tc.status === 'calling' && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />}
+            {tc.status === 'executing' && <Spinner />}
+            {tc.status === 'done' && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
+            <svg className="w-3 h-3 shrink-0 text-zinc-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.384-3.19A1.5 1.5 0 015 10.62V7.5a1.5 1.5 0 011.036-1.43l5.384-1.793a1.5 1.5 0 01.948 0l5.384 1.793A1.5 1.5 0 0119 7.5v3.12a1.5 1.5 0 01-1.036 1.36l-5.384 3.19a1.5 1.5 0 01-1.16 0z" />
+            </svg>
+            <span className="font-mono truncate">{formatToolName(tc.name)}</span>
+            <span className="text-zinc-600">
+              {tc.status === 'calling' && '— calling...'}
+              {tc.status === 'executing' && '— running...'}
+              {tc.status === 'done' && '— done'}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg className="w-3 h-3 animate-spin shrink-0 text-accent" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  );
+}
+
+/** Attach hover tooltip to citation links like [[1]](url) in rendered markdown */
+function useSourceTooltips(containerRef) {
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    let tooltip = null;
+
+    const show = (e) => {
+      const link = e.target.closest('.md-content a');
+      if (!link) return;
+      const href = link.getAttribute('href');
+      if (!href || !href.startsWith('http')) return;
+
+      // Remove existing tooltip
+      if (tooltip) tooltip.remove();
+
+      tooltip = document.createElement('div');
+      tooltip.className = 'source-tooltip';
+      tooltip.textContent = href;
+      document.body.appendChild(tooltip);
+
+      const rect = link.getBoundingClientRect();
+      tooltip.style.left = `${rect.left + rect.width / 2}px`;
+      tooltip.style.top = `${rect.top - 4}px`;
+    };
+
+    const hide = () => {
+      if (tooltip) { tooltip.remove(); tooltip = null; }
+    };
+
+    el.addEventListener('mouseover', show);
+    el.addEventListener('mouseout', hide);
+
+    return () => {
+      el.removeEventListener('mouseover', show);
+      el.removeEventListener('mouseout', hide);
+      if (tooltip) tooltip.remove();
+    };
+  });
+}
+
+/** Make links in md-content open in new tabs */
+function useLinkNewTab(containerRef) {
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      const link = e.target.closest('.md-content a');
+      if (!link) return;
+      const href = link.getAttribute('href');
+      if (href && href.startsWith('http')) {
+        e.preventDefault();
+        window.open(href, '_blank', 'noopener,noreferrer');
+      }
+    };
+    el.addEventListener('click', handler);
+    return () => el.removeEventListener('click', handler);
+  });
+}
+
 function Message({ msg, idx, streaming, onEditSave, onCopy, onRegenerate, onImageClick }) {
   const isUser = msg.role === 'user';
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const editRef = useRef(null);
+  const contentRef = useRef(null);
+
+  useSourceTooltips(contentRef);
+  useLinkNewTab(contentRef);
 
   const startEdit = () => {
     setEditText(msg.content);
@@ -121,7 +230,7 @@ function Message({ msg, idx, streaming, onEditSave, onCopy, onRegenerate, onImag
           {!isUser && (
             <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
           )}
-          <div className="min-w-0">
+          <div className="min-w-0" ref={contentRef}>
             {msg.files?.length > 0 && (
               <div className={`flex flex-wrap gap-2 mb-2 ${isUser ? 'justify-end' : ''}`}>
                 {msg.files.map((f, fi) => (
@@ -194,9 +303,10 @@ function StreamingMessage({ content, streamingRef }) {
   const renderedRef = useRef('');
   const timerRef = useRef(null);
   const pendingRef = useRef(content);
-  const structureRef = useRef(''); // tracks structural shape to avoid full re-renders
+  const structureRef = useRef('');
 
-  // Flush: render latest content to DOM with minimal updates
+  useLinkNewTab(contentRef);
+
   const flush = useCallback(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -204,40 +314,29 @@ function StreamingMessage({ content, streamingRef }) {
     if (text === renderedRef.current) return;
 
     const html = renderMarkdown(text, { isStreaming: true });
-
-    // Parse new HTML into a temp container
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html;
 
-    // Compute a structural signature: tag names + count of children
-    // If structure hasn't changed, do a targeted update instead of full innerHTML
     const newChildren = wrapper.children;
     const structSig = Array.from(newChildren).map(c => c.tagName + (c.children.length || 0)).join(',');
-
     const existingChildren = el.querySelectorAll(':scope > :not(.cursor-blink)');
     const oldStructSig = structureRef.current;
 
     if (oldStructSig && structSig === oldStructSig && existingChildren.length === newChildren.length) {
-      // Structure unchanged — do targeted update on changed nodes only
       for (let i = 0; i < newChildren.length; i++) {
         const newChild = newChildren[i];
         const oldChild = existingChildren[i];
         if (oldChild && newChild.innerHTML !== oldChild.innerHTML) {
-          // For pre blocks, only update the code content, not the header
           if (newChild.tagName === 'PRE' && oldChild.tagName === 'PRE') {
             const newCode = newChild.querySelector('code');
             const oldCode = oldChild.querySelector('code');
             const newBtn = newChild.querySelector('[data-copy]');
             const oldBtn = oldChild.querySelector('[data-copy]');
-            if (newCode && oldCode) {
-              oldCode.innerHTML = newCode.innerHTML;
-            }
-            // Update button label if it changed (e.g. incomplete -> complete)
+            if (newCode && oldCode) oldCode.innerHTML = newCode.innerHTML;
             if (newBtn && oldBtn) {
               const wasIncomplete = oldBtn.hasAttribute('data-incomplete');
               const nowIncomplete = newBtn.hasAttribute('data-incomplete');
               if (wasIncomplete && !nowIncomplete) {
-                // Block just completed — check for pending copy
                 const pre = oldChild;
                 const pendingId = pre.getAttribute('data-pending-copy');
                 if (pendingId && pendingCopyBlocks.has(pendingId)) {
@@ -266,8 +365,6 @@ function StreamingMessage({ content, streamingRef }) {
         }
       }
     } else {
-      // Structure changed — full re-render needed
-      // Save pending-copy states
       const savedStates = [];
       el.querySelectorAll('pre[data-pending-copy]').forEach(pre => {
         const id = pre.getAttribute('data-pending-copy');
@@ -278,7 +375,6 @@ function StreamingMessage({ content, streamingRef }) {
 
       el.innerHTML = wrapper.innerHTML;
 
-      // Restore pending-copy states
       if (savedStates.length > 0) {
         el.querySelectorAll('pre').forEach(pre => {
           const codeSnippet = pre.querySelector('code')?.textContent?.slice(0, 80) || '';
@@ -307,7 +403,6 @@ function StreamingMessage({ content, streamingRef }) {
 
     structureRef.current = structSig;
 
-    // Ensure cursor blink exists at the end
     let cursor = el.querySelector('.cursor-blink');
     if (!cursor) {
       cursor = document.createElement('span');
@@ -318,26 +413,19 @@ function StreamingMessage({ content, streamingRef }) {
     renderedRef.current = text;
   }, []);
 
-  // Continuously flush while content is changing, throttled to ~150ms
   useEffect(() => {
     pendingRef.current = content;
-
     const scheduleFlush = () => {
       if (timerRef.current) return;
       timerRef.current = setTimeout(() => {
         timerRef.current = null;
         flush();
-        // Keep scheduling if there's still unflushed content
-        if (pendingRef.current !== renderedRef.current) {
-          scheduleFlush();
-        }
+        if (pendingRef.current !== renderedRef.current) scheduleFlush();
       }, 150);
     };
-
     scheduleFlush();
   }, [content, flush]);
 
-  // Always flush on unmount (streaming ended) to show final state
   useEffect(() => {
     return () => {
       if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
@@ -345,7 +433,6 @@ function StreamingMessage({ content, streamingRef }) {
     };
   }, [flush]);
 
-  // Initial render
   useEffect(() => { flush(); }, [flush]);
 
   return (
@@ -366,7 +453,7 @@ function StreamingMessage({ content, streamingRef }) {
   );
 }
 
-export default function MessageArea({ chat, streaming, streamContent, continuing, onEditSave, onCopy, onRegenerate, onContinue, showContinue }) {
+export default function MessageArea({ chat, streaming, streamContent, continuing, toolCalls, onEditSave, onCopy, onRegenerate, onContinue, showContinue }) {
   const messagesRef = useRef(null);
   const streamingElRef = useRef(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -379,9 +466,7 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
     if (!el) return;
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
     setShowScrollBtn(!atBottom);
-    // Only disable auto-scroll if user deliberately scrolled up during streaming
     if (streaming && !atBottom) autoScrollRef.current = false;
-    // Re-enable if user scrolled back to bottom
     if (streaming && atBottom) autoScrollRef.current = true;
   }, [streaming]);
 
@@ -396,16 +481,13 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
     if (autoScrollRef.current && messagesRef.current) {
       messagesRef.current.scrollTop = messagesRef.current.scrollHeight;
     }
-  }, [chat?.messages?.length, streamContent]);
+  }, [chat?.messages?.length, streamContent, toolCalls]);
 
-  // Reset auto-scroll when chat changes or streaming starts
   useEffect(() => { autoScrollRef.current = true; }, [chat?.id]);
   useEffect(() => { if (streaming) autoScrollRef.current = true; }, [streaming]);
 
-  // Flush pending copies when streaming ends
   useEffect(() => {
     if (wasStreamingRef.current && !streaming) {
-      // Streaming just ended — flush any queued copy blocks from the now-finalized messages
       setTimeout(() => {
         if (messagesRef.current) flushPendingCopies(messagesRef.current);
       }, 100);
@@ -419,8 +501,6 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
   };
 
   const messages = chat?.messages?.filter(m => m.role !== 'system') || [];
-
-  // When continuing, hide the last assistant message (it's being replaced by the streaming view)
   const displayMessages = (streaming && continuing && messages.length > 0 && messages[messages.length - 1].role === 'assistant')
     ? messages.slice(0, -1)
     : messages;
@@ -435,6 +515,9 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
             {displayMessages.map((msg, i) => (
               <Message key={i} msg={msg} idx={i} streaming={streaming} onEditSave={onEditSave} onCopy={onCopy} onRegenerate={onRegenerate} onImageClick={setLightboxSrc} />
             ))}
+            {streaming && toolCalls && toolCalls.length > 0 && (
+              <ToolCallsDisplay toolCalls={toolCalls} />
+            )}
             {streaming && streamContent && <StreamingMessage content={streamContent} streamingRef={streamingElRef} />}
             {streaming && !streamContent && (
               <div className="message-row py-3 sm:py-4 fade-in">

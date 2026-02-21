@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Amplify } from 'aws-amplify';
 import { cognitoUserPoolsTokenProvider } from 'aws-amplify/auth/cognito';
-import { CookieStorage } from 'aws-amplify/adapter-core';
+import { CookieStorage } from 'aws-amplify/utils';
 import outputs from '../amplify_outputs.json';
 import { setBackendUrls } from './lib/api';
 import './index.css';

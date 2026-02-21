@@ -85,3 +85,24 @@ body {
   50% { background-position: 100% 50%; }
   100% { background-position: 0% 50%; }
 }
+
+/* Source link tooltip */
+.source-tooltip {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  background: rgba(16, 16, 20, 0.95);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #818cf8;
+  font-size: 11px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  padding: 4px 10px;
+  border-radius: 8px;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 9999;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  backdrop-filter: blur(12px);
+}

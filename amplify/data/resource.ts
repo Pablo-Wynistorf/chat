@@ -9,6 +9,7 @@ const schema = a.schema({
       maxTokens: a.integer().default(4096),
       temperature: a.float().default(1),
       selectedModel: a.string(),
+      mcpServers: a.string(), // JSON-stringified array of MCP server configs
     })
     .authorization((allow) => [allow.owner()]),
 
