@@ -160,6 +160,7 @@ export function buildChatBody(
         max_tokens: opts.max_tokens,
         temperature: opts.temperature,
         stream: opts.stream,
+        ...(opts.stream ? { stream_options: { include_usage: true } } : {}),
         ...(opts.mcp_servers && opts.mcp_servers.length > 0 ? { mcp_servers: opts.mcp_servers } : {}),
       };
   }
@@ -175,7 +176,6 @@ export function normalizeSSELine(provider: Provider, data: string): string | nul
 
   switch (provider) {
     case 'anthropic': {
-      // Anthropic SSE events: message_start, content_block_start, content_block_delta, message_delta, message_stop
       try {
         const parsed = JSON.parse(data);
         if (parsed.type === 'content_block_delta' && parsed.delta?.text) {
@@ -185,14 +185,29 @@ export function normalizeSSELine(provider: Provider, data: string): string | nul
         }
         if (parsed.type === 'message_delta') {
           const stop = parsed.delta?.stop_reason;
+          // Include usage from message_delta (output_tokens)
+          const usage = parsed.usage ? {
+            prompt_tokens: parsed.usage.input_tokens || 0,
+            completion_tokens: parsed.usage.output_tokens || 0,
+          } : undefined;
           return `data: ${JSON.stringify({
             choices: [{ index: 0, delta: {}, finish_reason: stop === 'max_tokens' ? 'length' : (stop || 'stop') }],
+            ...(usage ? { usage } : {}),
+          })}`;
+        }
+        if (parsed.type === 'message_start' && parsed.message?.usage) {
+          // Emit usage from message_start (input_tokens)
+          return `data: ${JSON.stringify({
+            choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }],
+            usage: {
+              prompt_tokens: parsed.message.usage.input_tokens || 0,
+              completion_tokens: parsed.message.usage.output_tokens || 0,
+            },
           })}`;
         }
         if (parsed.type === 'message_stop') {
           return 'data: [DONE]';
         }
-        // Skip other event types (message_start, content_block_start, ping, etc.)
         return null;
       } catch {
         return null;

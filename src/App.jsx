@@ -20,7 +20,7 @@ import ModelPicker from './components/ModelPicker';
 import MessageArea from './components/MessageArea';
 import InputBar from './components/InputBar';
 import ConfirmModal from './components/ConfirmModal';
-import ToastContainer from './components/Toast';
+import ToastContainer, { showToast } from './components/Toast';
 import AuthScreen from './components/AuthScreen';
 import ColorBends from './components/reactbits/ColorBends';
 
@@ -111,6 +111,7 @@ function AuthedApp({ onLogout }) {
   const [showContinue, setShowContinue] = useState(false);
   const [continuing, setContinuing] = useState(false);
   const [toolCalls, setToolCalls] = useState([]);
+  const [lastUsage, setLastUsage] = useState(null); // { prompt_tokens, completion_tokens }
   const streamContentRef = useRef('');
 
   const updateStreamContent = useCallback((val) => {
@@ -187,11 +188,12 @@ function AuthedApp({ onLogout }) {
         chatData,
         chat.abortRef.current,
         (text) => updateStreamContent(text),
-        (fullText, stopReason) => {
+        (fullText, stopReason, usage) => {
           if (fullText) {
             chat.addAssistantMessage(fullText);
             if (stopReason === 'length') setShowContinue(true);
           }
+          if (usage) setLastUsage(usage);
           updateStreamContent('');
           chat.setStreaming(false);
           chat.abortRef.current = null;
@@ -200,7 +202,8 @@ function AuthedApp({ onLogout }) {
       );
     } catch (err) {
       if (err.name !== 'AbortError') {
-        updateStreamContent(`Error: ${err.message}`);
+        showToast(err.message || 'Stream error', 'error');
+        updateStreamContent('');
       } else {
         // Save whatever was generated before the abort
         const partial = streamContentRef.current;
@@ -427,18 +430,20 @@ function AuthedApp({ onLogout }) {
           <ModelPicker />
         </div>
 
-        <MessageArea
-          chat={chat.activeChat}
-          streaming={chat.streaming}
-          streamContent={streamContent}
-          continuing={continuing}
-          toolCalls={toolCalls}
-          onEditSave={handleEditSave}
-          onCopy={handleCopy}
-          onRegenerate={handleRegenerate}
-          onContinue={handleContinue}
-          showContinue={showContinue}
-        />
+        {!showEmptyState && (
+          <MessageArea
+            chat={chat.activeChat}
+            streaming={chat.streaming}
+            streamContent={streamContent}
+            continuing={continuing}
+            toolCalls={toolCalls}
+            onEditSave={handleEditSave}
+            onCopy={handleCopy}
+            onRegenerate={handleRegenerate}
+            onContinue={handleContinue}
+            showContinue={showContinue}
+          />
+        )}
 
         <InputBar
           key={chat.activeChatId}
@@ -447,6 +452,7 @@ function AuthedApp({ onLogout }) {
           streaming={chat.streaming}
           centered={showEmptyState}
           messages={chat.activeChat?.messages || []}
+          lastUsage={lastUsage}
         />
       </main>
 

@@ -169,8 +169,14 @@ export async function streamChatViaLambda(
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `HTTP ${res.status}`);
+    const errBody = await res.text().catch(() => '');
+    let message = `HTTP ${res.status}`;
+    try {
+      const parsed = JSON.parse(errBody);
+      // Handle Anthropic-style: { error: { message } } or { error: "string" }
+      message = parsed.error?.message || parsed.error || parsed.message || message;
+    } catch { /* use raw text if not JSON */ if (errBody) message = errBody; }
+    throw new Error(message);
   }
 
   const reader = res.body.getReader();
@@ -178,6 +184,7 @@ export async function streamChatViaLambda(
   let buffer = '';
   let fullText = '';
   let stopReason = null;
+  let usage = null; // { prompt_tokens, completion_tokens }
 
   // Track active tool calls by index
   const activeToolCalls = {};
@@ -195,6 +202,13 @@ export async function streamChatViaLambda(
       if (data === '[DONE]') break;
       try {
         const parsed = JSON.parse(data);
+
+        // Handle error events from the upstream API (e.g. Anthropic error objects)
+        if (parsed.type === 'error' || parsed.error) {
+          const errMsg = parsed.error?.message || parsed.error || 'Stream error';
+          throw new Error(typeof errMsg === 'string' ? errMsg : JSON.stringify(errMsg));
+        }
+
         const choice = parsed.choices?.[0];
         if (!choice) continue;
 
@@ -239,8 +253,17 @@ export async function streamChatViaLambda(
           fullText += delta;
           onDelta(fullText);
         }
-      } catch {
-        /* skip */
+
+        // Capture usage stats if present (OpenAI sends in final chunk)
+        if (parsed.usage) {
+          usage = {
+            prompt_tokens: parsed.usage.prompt_tokens || 0,
+            completion_tokens: parsed.usage.completion_tokens || 0,
+          };
+        }
+      } catch (e) {
+        // Re-throw stream errors (from error event detection above)
+        if (e?.message && e.message !== 'skip') throw e;
       }
     }
   }
@@ -250,5 +273,5 @@ export async function streamChatViaLambda(
     if (onToolCall) onToolCall({ type: 'done', ...activeToolCalls[idx] });
   }
 
-  onDone(fullText, stopReason);
+  onDone(fullText, stopReason, usage);
 }
