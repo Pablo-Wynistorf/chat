@@ -17,6 +17,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   const [files, setFiles] = useState([]);
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
+  const barRef = useRef(null);
 
   const resize = () => {
     const el = textareaRef.current;
@@ -27,6 +28,27 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   useEffect(() => {
     textareaRef.current?.focus();
   }, [centered, animating, streaming]);
+
+  // Handle mobile virtual keyboard — adjust layout when keyboard appears
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const onResize = () => {
+      // On mobile, when keyboard opens, visualViewport.height shrinks
+      const keyboardOffset = window.innerHeight - vv.height;
+      if (barRef.current) {
+        barRef.current.style.paddingBottom = keyboardOffset > 50 ? `${keyboardOffset}px` : '';
+      }
+      // Scroll textarea into view
+      if (keyboardOffset > 50) {
+        requestAnimationFrame(() => textareaRef.current?.scrollIntoView({ block: 'nearest' }));
+      }
+    };
+
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
 
   const compressImage = (dataUrl, maxDim = 1024, quality = 0.7) => {
     return new Promise((resolve) => {
@@ -110,8 +132,8 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   const inputContent = (
     <>
       {fileAttachments}
-      <div className="flex items-center gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
-        <label className="shrink-0 cursor-pointer p-1.5 rounded-xl hover:bg-surface-3 transition text-zinc-500 hover:text-zinc-300">
+      <div className="flex items-end gap-1.5 sm:gap-2 bg-surface-2 border border-border rounded-2xl px-2.5 sm:px-3 py-2 sm:py-2.5 focus-within:border-accent/40 transition shadow-lg shadow-black/10">
+        <label className="shrink-0 cursor-pointer p-1.5 rounded-xl hover:bg-surface-3 transition text-zinc-500 hover:text-zinc-300 touch-target">
           <input ref={fileInputRef} type="file" multiple className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
         </label>
@@ -127,7 +149,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
           className="flex-1 bg-transparent text-[15px] outline-none resize-none max-h-40 leading-relaxed placeholder:text-zinc-600 min-h-[36px] py-[7px]"
         />
         <button onClick={send}
-          className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition text-white ${streaming ? 'bg-red-600 hover:bg-red-500' : 'bg-accent hover:bg-accent-hover'}`}>
+          className={`shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition text-white touch-target ${streaming ? 'bg-red-600 hover:bg-red-500' : 'bg-accent hover:bg-accent-hover'}`}>
           {streaming ? (
             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
           ) : (
@@ -140,7 +162,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
 
   // Decorative ghost for the slide animation — no refs, no interactivity
   const ghostContent = (
-    <div className="flex items-end gap-2 bg-surface-2 border border-border rounded-2xl px-3 py-2.5 shadow-lg shadow-black/10" aria-hidden="true">
+    <div className="flex items-end gap-1.5 sm:gap-2 bg-surface-2 border border-border rounded-2xl px-2.5 sm:px-3 py-2 sm:py-2.5 shadow-lg shadow-black/10" aria-hidden="true">
       <div className="shrink-0 p-1.5 rounded-xl text-zinc-500">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
       </div>
@@ -159,7 +181,6 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   // When animation starts, measure the docked target and set the overlay's end position via CSS custom properties
   useEffect(() => {
     if (animating && dockedInnerRef.current && overlayInnerRef.current) {
-      // Wait a frame so the docked bar is laid out (even though it's opacity:0)
       requestAnimationFrame(() => {
         const docked = dockedInnerRef.current?.getBoundingClientRect();
         const overlay = overlayInnerRef.current?.getBoundingClientRect();
@@ -175,7 +196,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
   if (centered) {
     return (
       <div style={{ position: 'absolute', inset: 0, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-        <div className="p-3 sm:p-4" style={{ width: '100%', pointerEvents: 'auto' }}>
+        <div className="px-3 py-3 sm:p-4" style={{ width: '100%', pointerEvents: 'auto' }}>
           <div className="max-w-[740px] mx-auto">
             {inputContent}
           </div>
@@ -201,7 +222,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
         >
           <div
             ref={overlayInnerRef}
-            className="p-3 sm:p-4"
+            className="px-3 py-3 sm:p-4"
             style={{ width: '100%', transform: 'translateY(0)' }}
           >
             <div className="max-w-[740px] mx-auto">
@@ -211,7 +232,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
         </div>
       )}
       <div
-        ref={dockedRef}
+        ref={(el) => { dockedRef.current = el; barRef.current = el; }}
         className="shrink-0 relative z-10"
         style={{
           background: 'rgba(12,12,14,0.6)',
@@ -219,7 +240,7 @@ export default function InputBar({ onSend, onStop, streaming, centered }) {
           opacity: animating ? 0 : 1,
         }}
       >
-        <div ref={dockedInnerRef} className="p-3 sm:p-4">
+        <div ref={dockedInnerRef} className="px-3 py-2 sm:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
           <div className="max-w-[740px] mx-auto">
             {inputContent}
           </div>

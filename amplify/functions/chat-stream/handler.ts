@@ -1,5 +1,6 @@
-// Streaming Lambda handler — invoked via Function URL with RESPONSE_STREAM mode.
-// CORS is handled by the Function URL configuration, not in-code headers.
+// Streaming Lambda handler — invoked via API Gateway REST API with ResponseTransferMode: STREAM.
+// Auth is handled by the Cognito User Pools authorizer on API Gateway.
+// The in-code role check below is defense-in-depth.
 
 declare const awslambda: {
   streamifyResponse: (handler: any) => any;

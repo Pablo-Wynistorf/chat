@@ -162,7 +162,7 @@ export async function streamChatViaLambda(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      Authorization: token,
     },
     body: JSON.stringify(payload),
     signal: abortController.signal,

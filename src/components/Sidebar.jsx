@@ -5,9 +5,9 @@ export default function Sidebar({ chats, activeChatId, onNewChat, onSelectChat, 
   return (
     <>
       <aside
-        className={`w-[260px] flex flex-col shrink-0 h-full fixed sm:relative z-20 transition-transform ${open ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
+        className={`w-[280px] sm:w-[260px] flex flex-col shrink-0 h-full fixed sm:relative z-20 transition-transform duration-200 ${open ? 'translate-x-0' : '-translate-x-full'} sm:translate-x-0`}
         style={{
-          background: 'rgba(12, 12, 14, 0.55)',
+          background: 'rgba(12, 12, 14, 0.85)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           borderRight: '1px solid rgba(255,255,255,0.06)',

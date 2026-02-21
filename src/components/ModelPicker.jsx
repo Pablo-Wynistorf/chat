@@ -58,7 +58,7 @@ export default function ModelPicker() {
   return (
     <div ref={ref} className="relative">
       <button onClick={() => { setOpen(!open); setSearch(''); }}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl transition text-sm max-w-[70vw]"
+        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl transition text-sm max-w-[60vw] sm:max-w-[70vw]"
         style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}
         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)'; }}
         onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}>

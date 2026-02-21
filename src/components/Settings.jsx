@@ -73,7 +73,7 @@ export default function Settings({ open, onClose, onDeleteAll, onLogout }) {
         onClick={onClose}
       />
       <div
-        className="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[94vw] max-w-lg rounded-2xl shadow-2xl shadow-black/60 flex flex-col max-h-[90vh]"
+        className="fixed z-50 inset-2 sm:inset-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:w-[94vw] sm:max-w-lg rounded-2xl shadow-2xl shadow-black/60 flex flex-col sm:max-h-[90vh]"
         style={glassStyle}
       >
         {/* Header */}

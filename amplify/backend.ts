@@ -14,8 +14,9 @@ import {
 import {
   HttpLambdaIntegration,
 } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
-import { FunctionUrlAuthType, HttpMethod as LambdaHttpMethod, InvokeMode } from 'aws-cdk-lib/aws-lambda';
 import { CfnUserPool } from 'aws-cdk-lib/aws-cognito';
+import * as apigateway from 'aws-cdk-lib/aws-apigateway';
+import * as cdk from 'aws-cdk-lib';
 
 const backend = defineBackend({
   auth,
@@ -24,7 +25,7 @@ const backend = defineBackend({
   chatStream,
 });
 
-// ── Add custom:roles attribute to User Pool schema so the OIDC IdP can map to it ──
+// ── Add custom:roles attribute to User Pool schema ──
 const cfnUserPool = backend.auth.resources.userPool.node.defaultChild as CfnUserPool;
 const existingSchema = (cfnUserPool.schema as any[]) || [];
 cfnUserPool.schema = [
@@ -37,17 +38,17 @@ cfnUserPool.schema = [
   },
 ];
 
-// ── HTTP API with Cognito JWT auth for non-streaming requests ──
-const apiStack = backend.createStack('ChatApiStack');
-
 const userPool = backend.auth.resources.userPool;
 const userPoolClient = backend.auth.resources.userPoolClient;
 
-const jwtAuthorizer = new HttpJwtAuthorizer('CognitoAuthorizer', 
+// ══════════════════════════════════════════════════════════════════════
+// HTTP API v2 — non-streaming requests (fetchModels, non-streaming chat)
+// ══════════════════════════════════════════════════════════════════════
+const apiStack = backend.createStack('ChatApiStack');
+
+const jwtAuthorizer = new HttpJwtAuthorizer('CognitoAuthorizer',
   `https://cognito-idp.${apiStack.region}.amazonaws.com/${userPool.userPoolId}`,
-  {
-    jwtAudience: [userPoolClient.userPoolClientId],
-  }
+  { jwtAudience: [userPoolClient.userPoolClientId] },
 );
 
 const httpApi = new HttpApi(apiStack, 'ChatHttpApi', {
@@ -78,20 +79,123 @@ httpApi.addRoutes({
   authorizer: jwtAuthorizer,
 });
 
-// ── Lambda Function URL for streaming (RESPONSE_STREAM mode) ──
+// ══════════════════════════════════════════════════════════════════════
+// REST API v1 — streaming requests (ResponseTransferMode: STREAM)
+// Same pattern as serverless-bedrock-access-gateway:
+//   REST API → response-streaming-invocations → awslambda.streamifyResponse
+// With Cognito authorizer instead of API key auth.
+// ══════════════════════════════════════════════════════════════════════
+const streamStack = backend.createStack('ChatStreamApiStack');
 const streamLambda = backend.chatStream.resources.lambda;
 
-const fnUrl = streamLambda.addFunctionUrl({
-  authType: FunctionUrlAuthType.NONE, // Auth handled by checking Cognito token in-function or by frontend
-  invokeMode: InvokeMode.RESPONSE_STREAM,
-  cors: {
-    allowedOrigins: ['*'],
-    allowedMethods: [LambdaHttpMethod.POST],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+// REST API (no default deployment — we manage it explicitly)
+const restApi = new apigateway.RestApi(streamStack, 'ChatStreamApi', {
+  restApiName: 'ChatStreamApi',
+  description: 'Streaming chat API with Cognito auth and response streaming',
+  endpointTypes: [apigateway.EndpointType.REGIONAL],
+  deploy: false,
+});
+
+// Cognito authorizer
+const cognitoAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(streamStack, 'StreamCognitoAuth', {
+  cognitoUserPools: [userPool],
+  identitySource: 'method.request.header.Authorization',
+});
+
+// Streaming integration URI (the special response-streaming-invocations path)
+const streamingUri = `arn:aws:apigateway:${streamStack.region}:lambda:path/2021-11-15/functions/${streamLambda.functionArn}/response-streaming-invocations`;
+
+// /stream resource
+const streamResource = restApi.root.addResource('stream');
+
+// POST /stream — Cognito-authorized, streaming proxy integration
+// We use L1 (CfnMethod) directly to set ResponseTransferMode and TimeoutInMillis
+// which aren't exposed in the L2 constructs yet.
+const postMethod = new apigateway.CfnMethod(streamStack, 'StreamPostMethod', {
+  restApiId: restApi.restApiId,
+  resourceId: streamResource.resourceId,
+  httpMethod: 'POST',
+  authorizationType: 'COGNITO_USER_POOLS',
+  authorizerId: cognitoAuthorizer.authorizerId,
+  integration: {
+    type: 'AWS_PROXY',
+    integrationHttpMethod: 'POST',
+    uri: streamingUri,
+    timeoutInMillis: 900000,
+    responseTransferMode: 'STREAM',
   },
 });
 
-// ── Outputs ──
+// OPTIONS /stream — CORS preflight (no auth)
+const optionsMethod = new apigateway.CfnMethod(streamStack, 'StreamOptionsMethod', {
+  restApiId: restApi.restApiId,
+  resourceId: streamResource.resourceId,
+  httpMethod: 'OPTIONS',
+  authorizationType: 'NONE',
+  integration: {
+    type: 'MOCK',
+    requestTemplates: {
+      'application/json': '{"statusCode": 200}',
+    },
+    integrationResponses: [
+      {
+        statusCode: '200',
+        responseParameters: {
+          'method.response.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+          'method.response.header.Access-Control-Allow-Methods': "'POST,OPTIONS'",
+          'method.response.header.Access-Control-Allow-Origin': "'*'",
+        },
+      },
+    ],
+  },
+  methodResponses: [
+    {
+      statusCode: '200',
+      responseParameters: {
+        'method.response.header.Access-Control-Allow-Headers': true,
+        'method.response.header.Access-Control-Allow-Methods': true,
+        'method.response.header.Access-Control-Allow-Origin': true,
+      },
+    },
+  ],
+});
+
+// Lambda permissions — API Gateway needs both Invoke and InvokeWithResponseStream
+new cdk.aws_lambda.CfnPermission(streamStack, 'ApiGwInvokePermission', {
+  functionName: streamLambda.functionName,
+  action: 'lambda:InvokeFunction',
+  principal: 'apigateway.amazonaws.com',
+  sourceArn: `arn:aws:execute-api:${streamStack.region}:${streamStack.account}:${restApi.restApiId}/*/*`,
+});
+
+new cdk.aws_lambda.CfnPermission(streamStack, 'ApiGwStreamPermission', {
+  functionName: streamLambda.functionName,
+  action: 'lambda:InvokeWithResponseStream',
+  principal: 'apigateway.amazonaws.com',
+  sourceArn: `arn:aws:execute-api:${streamStack.region}:${streamStack.account}:${restApi.restApiId}/*/*`,
+});
+
+// Deployment + Stage
+const deployment = new apigateway.CfnDeployment(streamStack, 'StreamApiDeployment', {
+  restApiId: restApi.restApiId,
+  description: 'Streaming API deployment with Cognito auth',
+});
+deployment.addDependency(postMethod);
+deployment.addDependency(optionsMethod);
+
+const _stage = new apigateway.CfnStage(streamStack, 'StreamApiStage', {
+  restApiId: restApi.restApiId,
+  deploymentId: deployment.ref,
+  stageName: 'v1',
+  description: 'Production stage with response streaming',
+  tracingEnabled: true,
+});
+
+// ══════════════════════════════════════════════════════════════════════
+// Outputs
+// ══════════════════════════════════════════════════════════════════════
+const streamUrl = `https://${restApi.restApiId}.execute-api.${streamStack.region}.amazonaws.com/v1/stream`;
+
 backend.addOutput({
   custom: {
     API: {
@@ -100,6 +204,6 @@ backend.addOutput({
         region: apiStack.region,
       },
     },
-    StreamUrl: fnUrl.url,
+    StreamUrl: streamUrl,
   },
 });

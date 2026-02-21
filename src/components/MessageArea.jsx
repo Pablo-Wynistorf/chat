@@ -93,22 +93,25 @@ function ToolCallsDisplay({ toolCalls }) {
   if (!toolCalls || toolCalls.length === 0) return null;
 
   return (
-    <div className="max-w-[740px] mx-auto px-4 sm:px-5 mb-1">
-      <div className="ml-10 space-y-1">
+    <div className="max-w-[740px] mx-auto px-3 sm:px-5 mb-2">
+      <div className="ml-8.5 sm:ml-10 space-y-1.5">
         {toolCalls.map((tc) => (
-          <div key={tc.id} className="flex items-center gap-2 text-xs text-zinc-500 py-1 px-2.5 rounded-lg"
-            style={{ background: 'rgba(124,92,252,0.05)', border: '1px solid rgba(124,92,252,0.1)' }}>
-            {tc.status === 'calling' && <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />}
-            {tc.status === 'executing' && <Spinner />}
-            {tc.status === 'done' && <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />}
-            <svg className="w-3 h-3 shrink-0 text-zinc-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17l-5.384-3.19A1.5 1.5 0 015 10.62V7.5a1.5 1.5 0 011.036-1.43l5.384-1.793a1.5 1.5 0 01.948 0l5.384 1.793A1.5 1.5 0 0119 7.5v3.12a1.5 1.5 0 01-1.036 1.36l-5.384 3.19a1.5 1.5 0 01-1.16 0z" />
-            </svg>
-            <span className="font-mono truncate">{formatToolName(tc.name)}</span>
-            <span className="text-zinc-600">
-              {tc.status === 'calling' && '— calling...'}
-              {tc.status === 'executing' && '— running...'}
-              {tc.status === 'done' && '— done'}
+          <div key={tc.id} className="flex items-center gap-2.5 text-[12px] text-zinc-400 py-1.5 px-3 rounded-xl"
+            style={{ background: 'rgba(124,92,252,0.04)', border: '1px solid rgba(124,92,252,0.08)' }}>
+            <div className="shrink-0 w-4 h-4 flex items-center justify-center">
+              {tc.status === 'calling' && <span className="w-2 h-2 rounded-full bg-amber-400/80 animate-pulse" />}
+              {tc.status === 'executing' && <Spinner />}
+              {tc.status === 'done' && (
+                <svg className="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              )}
+            </div>
+            <span className="font-mono text-zinc-300 truncate">{formatToolName(tc.name)}</span>
+            <span className="text-zinc-600 text-[11px]">
+              {tc.status === 'calling' && 'calling'}
+              {tc.status === 'executing' && 'running'}
+              {tc.status === 'done' && 'done'}
             </span>
           </div>
         ))}
@@ -119,7 +122,7 @@ function ToolCallsDisplay({ toolCalls }) {
 
 function Spinner() {
   return (
-    <svg className="w-3 h-3 animate-spin shrink-0 text-accent" fill="none" viewBox="0 0 24 24">
+    <svg className="w-3.5 h-3.5 animate-spin shrink-0 text-accent" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
     </svg>
@@ -224,11 +227,11 @@ function Message({ msg, idx, streaming, onEditSave, onCopy, onRegenerate, onImag
   };
 
   return (
-    <div className="message-row py-3 sm:py-4 fade-in group">
-      <div className={`max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
-        <div className={isUser ? (editing ? 'max-w-[95%] sm:max-w-[85%]' : 'max-w-[85%] sm:max-w-[70%]') : 'max-w-[85%] sm:max-w-[80%] flex gap-3'}>
+    <div className="message-row py-2.5 sm:py-4 fade-in group">
+      <div className={`max-w-[740px] mx-auto px-3 sm:px-5 flex gap-2.5 sm:gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}>
+        <div className={isUser ? (editing ? 'max-w-[95%] sm:max-w-[85%]' : 'max-w-[88%] sm:max-w-[70%]') : 'max-w-[90%] sm:max-w-[80%] flex gap-2.5 sm:gap-3'}>
           {!isUser && (
-            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
+            <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
           )}
           <div className="min-w-0" ref={contentRef}>
             {msg.files?.length > 0 && (
@@ -436,10 +439,10 @@ function StreamingMessage({ content, streamingRef }) {
   useEffect(() => { flush(); }, [flush]);
 
   return (
-    <div className="message-row py-3 sm:py-4 fade-in">
-      <div className="max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3 justify-start">
-        <div className="max-w-[85%] sm:max-w-[80%] flex gap-3">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
+    <div className="message-row py-2.5 sm:py-4 fade-in">
+      <div className="max-w-[740px] mx-auto px-3 sm:px-5 flex gap-2.5 sm:gap-3 justify-start">
+        <div className="max-w-[90%] sm:max-w-[80%] flex gap-2.5 sm:gap-3">
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
           <div className="min-w-0" ref={streamingRef}>
             <div
               ref={contentRef}
@@ -520,10 +523,10 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
             )}
             {streaming && streamContent && <StreamingMessage content={streamContent} streamingRef={streamingElRef} />}
             {streaming && !streamContent && (
-              <div className="message-row py-3 sm:py-4 fade-in">
-                <div className="max-w-[740px] mx-auto px-4 sm:px-5 flex gap-3 justify-start">
-                  <div className="max-w-[85%] sm:max-w-[80%] flex gap-3">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
+              <div className="message-row py-2.5 sm:py-4 fade-in">
+                <div className="max-w-[740px] mx-auto px-3 sm:px-5 flex gap-2.5 sm:gap-3 justify-start">
+                  <div className="max-w-[90%] sm:max-w-[80%] flex gap-2.5 sm:gap-3">
+                    <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center text-[10px] sm:text-[11px] font-bold shrink-0 mt-0.5 bg-surface-3 text-zinc-400 border border-border">AI</div>
                     <div className="flex items-center gap-1.5 py-2">
                       <span className="w-2 h-2 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '0ms' }} />
                       <span className="w-2 h-2 rounded-full bg-accent/60 animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -534,7 +537,7 @@ export default function MessageArea({ chat, streaming, streamContent, continuing
               </div>
             )}
             {showContinue && !streaming && (
-              <div className="max-w-[740px] mx-auto px-4 sm:px-5 pb-2">
+              <div className="max-w-[740px] mx-auto px-3 sm:px-5 pb-2">
                 <button onClick={onContinue}
                   className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-border-light bg-surface-2 text-zinc-400 text-xs hover:border-accent hover:text-zinc-200 hover:bg-surface-3 transition">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
