@@ -96,10 +96,13 @@ const restApi = new apigateway.RestApi(streamStack, 'ChatStreamApi', {
   deploy: false,
 });
 
-// Cognito authorizer
-const cognitoAuthorizer = new apigateway.CognitoUserPoolsAuthorizer(streamStack, 'StreamCognitoAuth', {
-  cognitoUserPools: [userPool],
+// Cognito authorizer (L1 — must match L1 CfnMethod usage)
+const cognitoAuthorizer = new apigateway.CfnAuthorizer(streamStack, 'StreamCognitoAuth', {
+  restApiId: restApi.restApiId,
+  name: 'CognitoStreamAuth',
+  type: 'COGNITO_USER_POOLS',
   identitySource: 'method.request.header.Authorization',
+  providerArns: [userPool.userPoolArn],
 });
 
 // Streaming integration URI (the special response-streaming-invocations path)
@@ -116,7 +119,7 @@ const postMethod = new apigateway.CfnMethod(streamStack, 'StreamPostMethod', {
   resourceId: streamResource.resourceId,
   httpMethod: 'POST',
   authorizationType: 'COGNITO_USER_POOLS',
-  authorizerId: cognitoAuthorizer.authorizerId,
+  authorizerId: cognitoAuthorizer.ref,
   integration: {
     type: 'AWS_PROXY',
     integrationHttpMethod: 'POST',
