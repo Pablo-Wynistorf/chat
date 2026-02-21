@@ -3,6 +3,7 @@ import {
   getCurrentUser,
   fetchAuthSession,
   signInWithRedirect,
+  fetchUserAttributes,
 } from 'aws-amplify/auth';
 
 export async function logout() {
@@ -20,6 +21,26 @@ export async function getUser() {
 export async function getIdToken() {
   const session = await fetchAuthSession();
   return session.tokens?.idToken?.toString() || '';
+}
+
+/** Get user profile info from Cognito (email, name, sub, etc.) */
+export async function getUserInfo() {
+  try {
+    const [attrs, session] = await Promise.all([
+      fetchUserAttributes(),
+      fetchAuthSession(),
+    ]);
+    const payload = session.tokens?.idToken?.payload || {};
+    return {
+      email: attrs.email || payload.email || '',
+      name: attrs.name || payload.name || attrs.preferred_username || '',
+      sub: attrs.sub || payload.sub || '',
+      identities: payload.identities || attrs.identities || '',
+      provider: 'OneIdp',
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function loginWithOidc() {

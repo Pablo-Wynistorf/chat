@@ -106,13 +106,11 @@ function AuthedApp({ onLogout }) {
       const found = chat.chatsRef.current.find(c => c.id === urlChatId);
       if (found) {
         chat.selectChat(urlChatId);
-        replaceChatUrl(urlChatId);
         return;
       }
     }
-    // No chat UUID in URL — always start a fresh chat
-    const id = chat.newChat();
-    replaceChatUrl(id);
+    // No chat UUID in URL — create a draft (no URL change)
+    chat.newChat();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.ready]);
 
@@ -123,8 +121,8 @@ function AuthedApp({ onLogout }) {
       if (id && chat.chatsRef.current.find(c => c.id === id)) {
         chat.selectChat(id);
       } else {
-        const newId = chat.newChat();
-        replaceChatUrl(newId);
+        chat.newChat();
+        replaceChatUrl(null);
       }
     };
     window.addEventListener('popstate', handler);
@@ -182,9 +180,8 @@ function AuthedApp({ onLogout }) {
   // ── Send: ensures a chat exists, adds message, streams ──
   const handleSend = useCallback((text, files) => {
     const id = chat.ensureChat();
-    replaceChatUrl(id);
-    // ensureChat guarantees activeIdRef is set synchronously via ref,
-    // so addUserMessage will find the chat immediately
+    // Push the URL now that the chat is real (first message)
+    pushChatUrl(id);
     const chatData = chat.addUserMessage(text, files);
     if (chatData) doStream(chatData);
   }, [chat, doStream]);
@@ -306,7 +303,12 @@ function AuthedApp({ onLogout }) {
   const confirmDeleteChat = useCallback(() => {
     if (deleteTarget) {
       const newActive = chat.deleteChat(deleteTarget);
-      replaceChatUrl(newActive);
+      if (newActive) {
+        replaceChatUrl(newActive);
+      } else {
+        chat.newChat();
+        replaceChatUrl(null);
+      }
     }
     setDeleteTarget(null);
   }, [deleteTarget, chat]);
@@ -318,8 +320,8 @@ function AuthedApp({ onLogout }) {
   const confirmDeleteAll = useCallback(() => {
     chat.deleteAllChats();
     setDeleteAllOpen(false);
-    const id = chat.newChat();
-    replaceChatUrl(id);
+    chat.newChat();
+    replaceChatUrl(null);
   }, [chat]);
 
   const handleNewChat = useCallback(() => {
@@ -330,7 +332,8 @@ function AuthedApp({ onLogout }) {
       return;
     }
     const id = chat.newChat();
-    pushChatUrl(id);
+    // Don't push /c/uuid — stay at root until first message
+    replaceChatUrl(null);
     setSidebarOpen(false);
   }, [chat]);
 

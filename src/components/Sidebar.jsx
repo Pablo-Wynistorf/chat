@@ -54,7 +54,7 @@ export default function Sidebar({ chats, activeChatId, onNewChat, onSelectChat, 
 
         {/* Chat list */}
         <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-1">
-          {chats.map(chat => {
+          {chats.filter(c => !c._draft).map(chat => {
             const isActive = chat.id === activeChatId;
             return (
               <SpotlightCard key={chat.id} className="rounded-xl" spotlightColor="rgba(124,92,252,0.12)">

@@ -64,12 +64,12 @@ export function useChat() {
     setChats([...chatsRef.current]);
   }, []);
 
-  // ── New chat ──
+  // ── New chat (draft — not persisted until first message) ──
   const newChat = useCallback(() => {
-    const c = { id: crypto.randomUUID(), title: 'New chat', messages: [], created: Date.now(), _loaded: true };
-    const updated = [c, ...chatsRef.current];
+    const c = { id: crypto.randomUUID(), title: 'New chat', messages: [], created: Date.now(), _loaded: true, _draft: true };
+    const updated = [c, ...chatsRef.current.filter(ch => !ch._draft)];
     setLocal(updated, c.id);
-    createChat(c).catch(console.error);
+    // Don't persist to DynamoDB — this is a draft
     return c.id;
   }, [setLocal]);
 
@@ -113,6 +113,12 @@ export function useChat() {
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
+
+    // If this is a draft chat, persist it to DynamoDB now
+    if (chat._draft) {
+      chat._draft = false;
+      createChat(chat).catch(console.error);
+    }
 
     const system = getSetting('systemPrompt');
     if (chat.messages.length === 0 && system) {
