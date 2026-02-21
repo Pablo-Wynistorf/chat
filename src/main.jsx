@@ -6,6 +6,9 @@ import { setBackendUrls } from './lib/api';
 import './index.css';
 import App from './App.jsx';
 
+// Required to complete OIDC redirect sign-in
+import 'aws-amplify/auth/enable-oauth-listener';
+
 Amplify.configure(outputs);
 
 // Register custom API endpoints from Amplify outputs

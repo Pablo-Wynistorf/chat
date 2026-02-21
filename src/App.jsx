@@ -40,15 +40,11 @@ export default function App() {
     getUser().then(u => setAuthed(!!u)).catch(() => setAuthed(false));
   }, []);
 
-  const handleAuth = useCallback(() => {
-    setAuthed(true);
-  }, []);
-
   if (authed === null) {
     return <div className="h-full flex items-center justify-center text-zinc-500 text-sm">Loading...</div>;
   }
   if (!authed) {
-    return <AuthScreen onAuth={handleAuth} />;
+    return <AuthScreen />;
   }
 
   return <AuthedApp onLogout={() => { logout(); setAuthed(false); }} />;

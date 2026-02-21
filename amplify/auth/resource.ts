@@ -2,7 +2,7 @@ import { defineAuth, secret } from '@aws-amplify/backend';
 
 export const auth = defineAuth({
   loginWith: {
-    email: true,
+    email: true, // Required by Cognito, but we won't expose it in the UI
     externalProviders: {
       oidc: [
         {
@@ -16,8 +16,16 @@ export const auth = defineAuth({
           },
         },
       ],
-      callbackUrls: ['http://localhost:5173/', 'https://localhost:5173/'],
-      logoutUrls: ['http://localhost:5173/', 'https://localhost:5173/'],
+      callbackUrls: [
+        'http://localhost:5173/',
+        'https://localhost:5173/',
+        'https://main.d309k0500i2i75.amplifyapp.com/',
+      ],
+      logoutUrls: [
+        'http://localhost:5173/',
+        'https://localhost:5173/',
+        'https://main.d309k0500i2i75.amplifyapp.com/',
+      ],
     },
   },
 });
