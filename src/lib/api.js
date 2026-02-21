@@ -86,7 +86,7 @@ export async function createChatMessage(chatId, msg, sortKey) {
     role: msg.role,
     content: msg.content || '',
     fileContent: msg.fileContent || null,
-    images: msg.images || null,
+    files: msg.files ? JSON.stringify(msg.files) : null,
   });
 }
 
@@ -100,7 +100,7 @@ export async function loadChatMessages(chatId) {
     role: m.role,
     content: m.content,
     ...(m.fileContent ? { fileContent: m.fileContent } : {}),
-    ...(m.images?.length ? { images: m.images } : {}),
+    ...(m.files ? { files: JSON.parse(m.files) } : {}),
   }));
 }
 

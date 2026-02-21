@@ -26,7 +26,7 @@ const schema = a.schema({
       role: a.string().required(),
       content: a.string().required(),
       fileContent: a.string(),
-      images: a.string().array(),
+      files: a.string(),
     })
     .secondaryIndexes((index) => [
       index('chatId').sortKeys(['sortKey']).queryField('messagesByChatId'),

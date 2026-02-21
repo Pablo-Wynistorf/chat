@@ -10,6 +10,7 @@ import {
   removeAllChats,
 } from '../lib/storage';
 import { getSetting } from '../lib/settings';
+import { saveFile, loadFile } from '../lib/fileStore';
 
 export function useChat() {
   const [chats, setChats] = useState([]);
@@ -45,6 +46,19 @@ export function useChat() {
     const chat = chatsRef.current.find(c => c.id === chatId);
     if (!chat || chat._loaded) return;
     const msgs = await loadMessages(chatId);
+    // Hydrate image content from IndexedDB
+    for (const m of msgs) {
+      if (!m.files) continue;
+      for (const f of m.files) {
+        if (f.type === 'image' && f.fileId) {
+          const content = await loadFile(f.fileId);
+          if (content) f.content = content;
+        }
+      }
+      // Rebuild convenience images array from hydrated files
+      const loaded = m.files.filter(f => f.type === 'image' && f.content);
+      if (loaded.length) m.images = loaded.map(f => f.content);
+    }
     chat.messages = msgs;
     chat._loaded = true;
     setChats([...chatsRef.current]);
@@ -115,11 +129,24 @@ export function useChat() {
       fileContent = textFiles.map(f => `--- ${f.name} ---\n${f.content}\n--- end ---`).join('\n\n');
     }
 
+    // Save images to IndexedDB, build files array with fileIds
+    const fileEntries = [];
+    for (const f of files) {
+      if (f.type === 'image' && f.content) {
+        const fileId = `f-${crypto.randomUUID()}`;
+        saveFile(fileId, f.content).catch(console.error);
+        fileEntries.push({ name: f.name, type: 'image', fileId, content: f.content });
+      } else if (f.type === 'text') {
+        fileEntries.push({ name: f.name, type: 'text' });
+      }
+    }
+
     const msg = {
       role: 'user',
       content: text || (imageFiles.length ? '(image attached)' : ''),
       fileContent: fileContent || undefined,
       images: imageFiles.length ? imageFiles.map(f => f.content) : undefined,
+      files: fileEntries.length ? fileEntries : undefined,
     };
 
     chat.messages.push(msg);
@@ -130,7 +157,13 @@ export function useChat() {
     }
 
     setChats([...current]);
-    addMessage(chat.id, msg, sortKey).catch(console.error);
+    // For DynamoDB, strip image content — only store fileIds
+    const dbMsg = {
+      ...msg,
+      images: undefined,
+      files: fileEntries.length ? fileEntries.map(f => ({ name: f.name, type: f.type, fileId: f.fileId })) : undefined,
+    };
+    addMessage(chat.id, dbMsg, sortKey).catch(console.error);
     return chat;
   }, []);
 
