@@ -33,12 +33,20 @@ export function buildHeaders(provider: Provider, apiKey: string): Record<string,
   }
 }
 
+/** Ensure Anthropic endpoints include /v1 path */
+function anthropicBase(endpoint: string): string {
+  const base = endpoint.replace(/\/$/, '');
+  // If user provided https://api.anthropic.com (no /v1), add it
+  if (!base.endsWith('/v1') && !base.includes('/v1/')) return `${base}/v1`;
+  return base;
+}
+
 /** Build the fetch models URL */
 export function buildModelsUrl(provider: Provider, endpoint: string, apiKey: string): string {
   const base = endpoint.replace(/\/$/, '');
   switch (provider) {
     case 'anthropic':
-      return `${base}/models`;
+      return `${anthropicBase(endpoint)}/models`;
     case 'google':
       return `${base}/models?key=${apiKey}`;
     case 'openai-compat':
@@ -88,7 +96,7 @@ export function buildChatUrl(provider: Provider, endpoint: string, model: string
   const base = endpoint.replace(/\/$/, '');
   switch (provider) {
     case 'anthropic':
-      return `${base}/messages`;
+      return `${anthropicBase(endpoint)}/messages`;
     case 'google':
       return `${base}/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
     case 'openai-compat':

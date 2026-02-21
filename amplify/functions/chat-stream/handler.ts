@@ -17,6 +17,12 @@ declare const awslambda: {
   };
 };
 
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type,Authorization',
+  'Access-Control-Allow-Methods': 'POST,OPTIONS',
+};
+
 /** Decode JWT payload and check for a role claim. */
 function hasRequiredRole(jwt: string, role: string): boolean {
   try {
@@ -40,12 +46,23 @@ function hasRequiredRole(jwt: string, role: string): boolean {
 
 export const handler = awslambda.streamifyResponse(
   async (event: any, responseStream: any, _context: any) => {
+    // Handle CORS preflight (belt-and-suspenders alongside API GW OPTIONS)
+    if (event.httpMethod === 'OPTIONS' || event.requestContext?.http?.method === 'OPTIONS') {
+      const s = awslambda.HttpResponseStream.from(responseStream, {
+        statusCode: 200,
+        headers: { ...CORS_HEADERS },
+      });
+      s.write('');
+      s.end();
+      return;
+    }
+
     const authHeader = event.headers?.['authorization'] || event.headers?.['Authorization'] || '';
     const token = authHeader.replace(/^Bearer\s+/i, '');
     if (!token || !hasRequiredRole(token, 'chatUser')) {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 403,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
       errStream.write(JSON.stringify({ error: 'Forbidden: missing chatUser role' }));
       errStream.end();
@@ -58,7 +75,7 @@ export const handler = awslambda.streamifyResponse(
     } catch {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
       errStream.write(JSON.stringify({ error: 'Invalid JSON body' }));
       errStream.end();
@@ -70,7 +87,7 @@ export const handler = awslambda.streamifyResponse(
     if (!endpoint || !apiKey) {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 400,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
       errStream.write(JSON.stringify({ error: 'Missing endpoint or apiKey' }));
       errStream.end();
@@ -101,7 +118,7 @@ export const handler = awslambda.streamifyResponse(
         const errText = await apiRes.text();
         const errStream = awslambda.HttpResponseStream.from(responseStream, {
           statusCode: apiRes.status,
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
         });
         errStream.write(errText);
         errStream.end();
@@ -114,6 +131,7 @@ export const handler = awslambda.streamifyResponse(
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
+          ...CORS_HEADERS,
         },
       });
 
@@ -154,7 +172,7 @@ export const handler = awslambda.streamifyResponse(
       console.error('Stream proxy error:', err);
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 500,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...CORS_HEADERS },
       });
       errStream.write(JSON.stringify({ error: err.message || 'Internal error' }));
       errStream.end();

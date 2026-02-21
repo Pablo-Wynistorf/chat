@@ -179,6 +179,27 @@ new cdk.aws_lambda.CfnPermission(streamStack, 'ApiGwStreamPermission', {
   sourceArn: `arn:aws:execute-api:${streamStack.region}:${streamStack.account}:${restApi.ref}/*/*`,
 });
 
+// Gateway responses — add CORS headers to API Gateway-level errors (auth failures, etc.)
+new apigateway.CfnGatewayResponse(streamStack, 'GatewayDefault4XX', {
+  restApiId: restApi.ref,
+  responseType: 'DEFAULT_4XX',
+  responseParameters: {
+    'gatewayresponse.header.Access-Control-Allow-Origin': "'*'",
+    'gatewayresponse.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+    'gatewayresponse.header.Access-Control-Allow-Methods': "'POST,OPTIONS'",
+  },
+});
+
+new apigateway.CfnGatewayResponse(streamStack, 'GatewayDefault5XX', {
+  restApiId: restApi.ref,
+  responseType: 'DEFAULT_5XX',
+  responseParameters: {
+    'gatewayresponse.header.Access-Control-Allow-Origin': "'*'",
+    'gatewayresponse.header.Access-Control-Allow-Headers': "'Content-Type,Authorization'",
+    'gatewayresponse.header.Access-Control-Allow-Methods': "'POST,OPTIONS'",
+  },
+});
+
 // Deployment + Stage
 const deployment = new apigateway.CfnDeployment(streamStack, 'StreamApiDeployment', {
   restApiId: restApi.ref,

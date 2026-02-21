@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { getSettings, getSetting, updateSettings, onSettingsChange } from '../lib/settings';
 import { fetchModels } from '../lib/stream';
 import { saveUserSettings } from '../lib/api';
+import { showToast } from './Toast';
 
 export default function ModelPicker() {
   const [open, setOpen] = useState(false);
@@ -10,22 +11,17 @@ export default function ModelPicker() {
   const [current, setCurrent] = useState(getSetting('selectedModel') || '');
   const [currentProvider, setCurrentProvider] = useState(getSetting('selectedProvider') || '');
   const ref = useRef(null);
-  const fetchedRef = useRef(false);
+  const lastProvidersHash = useRef('');
 
-  useEffect(() => {
-    return onSettingsChange(s => {
-      if (s.selectedModel !== current) setCurrent(s.selectedModel || '');
-      if (s.selectedProvider !== currentProvider) setCurrentProvider(s.selectedProvider || '');
-    });
-  }, [current, currentProvider]);
-
-  // Fetch models from all providers
-  useEffect(() => {
-    if (fetchedRef.current) return;
+  const doFetchAll = useCallback(() => {
     const s = getSettings();
     const providers = s.providers || [];
     if (providers.length === 0) return;
-    fetchedRef.current = true;
+
+    // Hash to avoid duplicate fetches for the same provider set
+    const hash = providers.map(p => `${p.id}:${p.endpoint}:${p.apiKey}`).join('|');
+    if (hash === lastProvidersHash.current) return;
+    lastProvidersHash.current = hash;
 
     const results = {};
     Promise.allSettled(
@@ -35,11 +31,11 @@ export default function ModelPicker() {
           results[p.id] = { name: p.name, models };
         } catch {
           results[p.id] = { name: p.name, models: [] };
+          showToast(`Failed to fetch models from ${p.name}`);
         }
       })
     ).then(() => {
       setModelsByProvider(results);
-      // Auto-select first model if none selected
       if (!getSetting('selectedModel')) {
         for (const pid of Object.keys(results)) {
           if (results[pid].models.length > 0) {
@@ -52,7 +48,24 @@ export default function ModelPicker() {
         }
       }
     });
-  });
+  }, []);
+
+  // Initial fetch
+  useEffect(() => { doFetchAll(); }, [doFetchAll]);
+
+  // Refetch when providers change
+  useEffect(() => {
+    return onSettingsChange((s) => {
+      if (s.selectedModel !== current) setCurrent(s.selectedModel || '');
+      if (s.selectedProvider !== currentProvider) setCurrentProvider(s.selectedProvider || '');
+      // If providers changed, reset hash and refetch
+      const hash = (s.providers || []).map(p => `${p.id}:${p.endpoint}:${p.apiKey}`).join('|');
+      if (hash !== lastProvidersHash.current) {
+        lastProvidersHash.current = ''; // reset so doFetchAll runs
+        doFetchAll();
+      }
+    });
+  }, [current, currentProvider, doFetchAll]);
 
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
