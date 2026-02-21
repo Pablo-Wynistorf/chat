@@ -15,6 +15,7 @@ import {
   HttpLambdaIntegration,
 } from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import { FunctionUrlAuthType, HttpMethod as LambdaHttpMethod, InvokeMode } from 'aws-cdk-lib/aws-lambda';
+import { CfnUserPool } from 'aws-cdk-lib/aws-cognito';
 
 const backend = defineBackend({
   auth,
@@ -22,6 +23,19 @@ const backend = defineBackend({
   chatProxy,
   chatStream,
 });
+
+// ── Add custom:roles attribute to User Pool schema so the OIDC IdP can map to it ──
+const cfnUserPool = backend.auth.resources.userPool.node.defaultChild as CfnUserPool;
+const existingSchema = (cfnUserPool.schema as any[]) || [];
+cfnUserPool.schema = [
+  ...existingSchema,
+  {
+    name: 'roles',
+    attributeDataType: 'String',
+    mutable: true,
+    stringAttributeConstraints: { maxLength: '2048' },
+  },
+];
 
 // ── HTTP API with Cognito JWT auth for non-streaming requests ──
 const apiStack = backend.createStack('ChatApiStack');
