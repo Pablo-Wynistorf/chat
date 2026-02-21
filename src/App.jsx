@@ -100,6 +100,7 @@ function AuthedApp({ onLogout }) {
 
   // ── Init: restore chat from URL or create a new one ──
   useEffect(() => {
+    if (!chat.ready) return;
     const urlChatId = getChatIdFromUrl();
     if (urlChatId) {
       const found = chat.chatsRef.current.find(c => c.id === urlChatId);
@@ -113,7 +114,7 @@ function AuthedApp({ onLogout }) {
     const id = chat.newChat();
     replaceChatUrl(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [chat.ready]);
 
   // ── Browser back/forward ──
   useEffect(() => {

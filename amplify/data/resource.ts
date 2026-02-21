@@ -11,6 +11,27 @@ const schema = a.schema({
       selectedModel: a.string(),
     })
     .authorization((allow) => [allow.owner()]),
+
+  Chat: a
+    .model({
+      title: a.string().required(),
+      created: a.float().required(),
+    })
+    .authorization((allow) => [allow.owner()]),
+
+  ChatMessage: a
+    .model({
+      chatId: a.string().required(),
+      sortKey: a.float().required(),
+      role: a.string().required(),
+      content: a.string().required(),
+      fileContent: a.string(),
+      images: a.string().array(),
+    })
+    .secondaryIndexes((index) => [
+      index('chatId').sortKeys(['sortKey']).queryField('messagesByChatId'),
+    ])
+    .authorization((allow) => [allow.owner()]),
 });
 
 export type Schema = ClientSchema<typeof schema>;

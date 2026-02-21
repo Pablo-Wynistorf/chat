@@ -36,6 +36,90 @@ export async function loadUserSettings() {
   return data?.[0] || null;
 }
 
+// ── Chat CRUD ──
+
+export async function createChat(chat) {
+  const client = getDataClient();
+  return client.models.Chat.create({
+    id: chat.id,
+    title: chat.title,
+    created: chat.created,
+  });
+}
+
+export async function updateChat(id, fields) {
+  const client = getDataClient();
+  return client.models.Chat.update({ id, ...fields });
+}
+
+export async function deleteChat(id) {
+  const client = getDataClient();
+  // Delete all messages first
+  const { data: msgs } = await client.models.ChatMessage.messagesByChatId({ chatId: id });
+  await Promise.all((msgs || []).map(m => client.models.ChatMessage.delete({ id: m.id })));
+  return client.models.Chat.delete({ id });
+}
+
+export async function loadAllChats() {
+  const client = getDataClient();
+  const { data } = await client.models.Chat.list({ limit: 1000 });
+  return (data || []).sort((a, b) => b.created - a.created);
+}
+
+export async function deleteAllChats() {
+  const client = getDataClient();
+  const { data: chats } = await client.models.Chat.list({ limit: 1000 });
+  for (const chat of (chats || [])) {
+    const { data: msgs } = await client.models.ChatMessage.messagesByChatId({ chatId: chat.id });
+    await Promise.all((msgs || []).map(m => client.models.ChatMessage.delete({ id: m.id })));
+    await client.models.Chat.delete({ id: chat.id });
+  }
+}
+
+// ── ChatMessage CRUD ──
+
+export async function createChatMessage(chatId, msg, sortKey) {
+  const client = getDataClient();
+  return client.models.ChatMessage.create({
+    chatId,
+    sortKey,
+    role: msg.role,
+    content: msg.content || '',
+    fileContent: msg.fileContent || null,
+    images: msg.images || null,
+  });
+}
+
+export async function loadChatMessages(chatId) {
+  const client = getDataClient();
+  const { data } = await client.models.ChatMessage.messagesByChatId(
+    { chatId },
+    { sortDirection: 'ASC', limit: 5000 },
+  );
+  return (data || []).map(m => ({
+    role: m.role,
+    content: m.content,
+    ...(m.fileContent ? { fileContent: m.fileContent } : {}),
+    ...(m.images?.length ? { images: m.images } : {}),
+  }));
+}
+
+export async function deleteChatMessages(chatId) {
+  const client = getDataClient();
+  const { data: msgs } = await client.models.ChatMessage.messagesByChatId({ chatId });
+  await Promise.all((msgs || []).map(m => client.models.ChatMessage.delete({ id: m.id })));
+}
+
+export async function deleteChatMessagesFrom(chatId, fromSortKey) {
+  const client = getDataClient();
+  const { data: msgs } = await client.models.ChatMessage.messagesByChatId(
+    { chatId },
+    { sortDirection: 'ASC', limit: 5000 },
+  );
+  const toDelete = (msgs || []).filter(m => m.sortKey >= fromSortKey);
+  await Promise.all(toDelete.map(m => client.models.ChatMessage.delete({ id: m.id })));
+}
+
 // ── Fetch models via Lambda proxy ──
 export async function fetchModelsViaLambda(endpoint, apiKey) {
   const token = await getIdToken();

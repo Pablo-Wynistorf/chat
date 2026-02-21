@@ -1,87 +1,66 @@
-import { saveFile, loadFile, deleteFiles, clearAllFiles, getFileIds } from './fileStore';
+// Storage layer — backed by DynamoDB via Amplify Data.
+// Chats and messages are persisted server-side for cross-device sync.
+// File attachments (images, text files) still use IndexedDB locally.
 
-const CHATS_KEY = 'chats';
-const ACTIVE_KEY = 'activeChatId';
+import {
+  createChat as dbCreateChat,
+  updateChat as dbUpdateChat,
+  deleteChat as dbDeleteChat,
+  loadAllChats as dbLoadAllChats,
+  deleteAllChats as dbDeleteAllChats,
+  createChatMessage,
+  loadChatMessages,
+  deleteChatMessages,
+  deleteChatMessagesFrom,
+} from './api';
 
-export function loadChatsRaw() {
-  try { return JSON.parse(localStorage.getItem(CHATS_KEY) || '[]'); }
-  catch { return []; }
-}
-
-// Hydrate file content from IndexedDB into chat messages
+// ── Load all chat metadata from DynamoDB ──
 export async function loadChats() {
-  const chats = loadChatsRaw();
-  const promises = [];
-  for (const c of chats) {
-    for (const m of c.messages) {
-      if (!m.files) continue;
-      for (const f of m.files) {
-        if (!f.fileId) continue;
-        promises.push(
-          loadFile(f.fileId).then(content => { if (content != null) f.content = content; })
-        );
-      }
-    }
-  }
-  await Promise.all(promises);
-  // Rebuild convenience fields from hydrated files
-  for (const c of chats) {
-    for (const m of c.messages) {
-      if (!m.files) continue;
-      const images = m.files.filter(f => f.type === 'image' && f.content);
-      const textFiles = m.files.filter(f => f.type === 'text' && f.content);
-      if (images.length) m.images = images.map(f => f.content);
-      if (textFiles.length) {
-        m.fileContent = textFiles.map(f => `--- ${f.name} ---\n${f.content}\n--- end ---`).join('\n\n');
-      }
-    }
-  }
-  return chats;
-}
-
-// Save chats to localStorage + file content to IndexedDB
-export async function saveChats(chats, activeChatId) {
-  const fileOps = [];
-  const lite = chats.map(c => ({
-    ...c,
-    messages: c.messages.map(m => {
-      const clean = { role: m.role, content: m.content };
-      if (m.fileContent) clean.fileContent = m.fileContent;
-      if (m.files) {
-        clean.files = m.files.map(f => {
-          const entry = { name: f.name, type: f.type };
-          if (f.content) {
-            // Generate a stable ID if not already assigned
-            const fileId = f.fileId || `f-${crypto.randomUUID()}`;
-            entry.fileId = fileId;
-            // Also set fileId on the in-memory object so we don't re-generate
-            f.fileId = fileId;
-            fileOps.push(saveFile(fileId, f.content));
-          } else if (f.fileId) {
-            entry.fileId = f.fileId;
-          }
-          return entry;
-        });
-      }
-      return clean;
-    }),
+  const chats = await dbLoadAllChats();
+  return chats.map(c => ({
+    id: c.id,
+    title: c.title,
+    created: c.created,
+    messages: [], // messages loaded lazily
   }));
-  try { localStorage.setItem(CHATS_KEY, JSON.stringify(lite)); } catch (e) { console.warn('Storage full', e); }
-  localStorage.setItem(ACTIVE_KEY, activeChatId || '');
-  if (fileOps.length) await Promise.all(fileOps);
 }
 
-// Delete files associated with specific chats
-export async function deleteChatsFiles(chatsToDelete) {
-  const ids = getFileIds(chatsToDelete);
-  if (ids.length) await deleteFiles(ids);
+// ── Load messages for a specific chat ──
+export async function loadMessages(chatId) {
+  return loadChatMessages(chatId);
 }
 
-// Delete all files from IndexedDB
-export async function deleteAllFiles() {
-  await clearAllFiles();
+// ── Create a new chat ──
+export async function createChat(chat) {
+  await dbCreateChat(chat);
 }
 
-export function loadActiveChatId() {
-  return localStorage.getItem(ACTIVE_KEY) || null;
+// ── Update chat metadata (e.g. title) ──
+export async function updateChatMeta(id, fields) {
+  await dbUpdateChat(id, fields);
+}
+
+// ── Add a single message to a chat ──
+export async function addMessage(chatId, msg, sortKey) {
+  await createChatMessage(chatId, msg, sortKey);
+}
+
+// ── Delete messages from a given sortKey onward ──
+export async function truncateMessages(chatId, fromSortKey) {
+  await deleteChatMessagesFrom(chatId, fromSortKey);
+}
+
+// ── Delete all messages in a chat ──
+export async function clearMessages(chatId) {
+  await deleteChatMessages(chatId);
+}
+
+// ── Delete a chat and its messages ──
+export async function removeChat(id) {
+  await dbDeleteChat(id);
+}
+
+// ── Delete all chats ──
+export async function removeAllChats() {
+  await dbDeleteAllChats();
 }

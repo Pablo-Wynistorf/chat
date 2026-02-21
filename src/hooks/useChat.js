@@ -1,72 +1,89 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { loadChatsRaw, loadChats, saveChats, deleteChatsFiles, deleteAllFiles, loadActiveChatId } from '../lib/storage';
+import {
+  loadChats,
+  loadMessages,
+  createChat,
+  updateChatMeta,
+  addMessage,
+  truncateMessages,
+  removeChat,
+  removeAllChats,
+} from '../lib/storage';
 import { getSetting } from '../lib/settings';
-import { deleteFiles } from '../lib/fileStore';
 
-// Collect fileIds from an array of messages
-function collectFileIds(messages) {
-  const ids = [];
-  for (const m of messages) {
-    if (m.files) for (const f of m.files) { if (f.fileId) ids.push(f.fileId); }
-  }
-  return ids;
-}
 export function useChat() {
-  const [chats, setChats] = useState(loadChatsRaw);
-  const [activeChatId, setActiveChatId] = useState(loadActiveChatId);
+  const [chats, setChats] = useState([]);
+  const [activeChatId, setActiveChatId] = useState(null);
   const [streaming, setStreaming] = useState(false);
   const [ready, setReady] = useState(false);
   const abortRef = useRef(null);
 
-  const chatsRef = useRef(chats);
-  const activeIdRef = useRef(activeChatId);
+  const chatsRef = useRef([]);
+  const activeIdRef = useRef(null);
 
-  // Hydrate file content from IndexedDB on mount
+  // Load chat list from DynamoDB on mount
   useEffect(() => {
-    loadChats().then(hydrated => {
-      chatsRef.current = hydrated;
-      setChats(hydrated);
+    loadChats().then(loaded => {
+      chatsRef.current = loaded;
+      setChats(loaded);
       setReady(true);
-    });
+    }).catch(() => setReady(true));
   }, []);
 
-  const persist = useCallback((newChats, newActiveId) => {
+  // Helper: update local state + refs (no persistence — callers handle DB ops)
+  const setLocal = useCallback((newChats, newActiveId) => {
     chatsRef.current = newChats;
     activeIdRef.current = newActiveId;
-    setChats(newChats);
+    setChats([...newChats]);
     setActiveChatId(newActiveId);
-    saveChats(newChats, newActiveId);
   }, []);
 
   const activeChat = chats.find(c => c.id === activeChatId) || null;
 
+  // ── Load messages for a chat (lazy) ──
+  const ensureMessages = useCallback(async (chatId) => {
+    const chat = chatsRef.current.find(c => c.id === chatId);
+    if (!chat || chat._loaded) return;
+    const msgs = await loadMessages(chatId);
+    chat.messages = msgs;
+    chat._loaded = true;
+    setChats([...chatsRef.current]);
+  }, []);
+
+  // ── New chat ──
   const newChat = useCallback(() => {
-    const c = { id: crypto.randomUUID(), title: 'New chat', messages: [], created: Date.now() };
+    const c = { id: crypto.randomUUID(), title: 'New chat', messages: [], created: Date.now(), _loaded: true };
     const updated = [c, ...chatsRef.current];
-    persist(updated, c.id);
+    setLocal(updated, c.id);
+    createChat(c).catch(console.error);
     return c.id;
-  }, [persist]);
+  }, [setLocal]);
 
+  // ── Select chat ──
   const selectChat = useCallback((id) => {
-    persist(chatsRef.current, id);
-  }, [persist]);
+    activeIdRef.current = id;
+    setActiveChatId(id);
+    ensureMessages(id);
+  }, [ensureMessages]);
 
+  // ── Delete chat ──
   const deleteChat = useCallback((id) => {
     const current = chatsRef.current;
-    const deleted = current.filter(c => c.id === id);
     const updated = current.filter(c => c.id !== id);
     const currentActive = activeIdRef.current;
     const newActive = currentActive === id ? (updated[0]?.id || null) : currentActive;
-    deleteChatsFiles(deleted);
-    persist(updated, newActive);
+    setLocal(updated, newActive);
+    removeChat(id).catch(console.error);
     return newActive;
-  }, [persist]);
+  }, [setLocal]);
 
+  // ── Delete all chats ──
   const deleteAllChats = useCallback(() => {
-    deleteAllFiles();
-    persist([], null);
-  }, [persist]);
+    setLocal([], null);
+    removeAllChats().catch(console.error);
+  }, [setLocal]);
 
+  // ── Ensure a chat exists ──
   const ensureChat = useCallback(() => {
     const current = chatsRef.current;
     const currentActive = activeIdRef.current;
@@ -76,15 +93,18 @@ export function useChat() {
     return newChat();
   }, [newChat]);
 
+  // ── Add user message ──
   const addUserMessage = useCallback((text, files = []) => {
-    const current = [...chatsRef.current];
+    const current = chatsRef.current;
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
 
     const system = getSetting('systemPrompt');
     if (chat.messages.length === 0 && system) {
-      chat.messages.push({ role: 'system', content: system });
+      const sysMsg = { role: 'system', content: system };
+      chat.messages.push(sysMsg);
+      addMessage(chat.id, sysMsg, chat.messages.length).catch(console.error);
     }
 
     const textFiles = files.filter(f => f.type === 'text');
@@ -99,41 +119,53 @@ export function useChat() {
       role: 'user',
       content: text || (imageFiles.length ? '(image attached)' : ''),
       fileContent: fileContent || undefined,
-      files: files.length ? files : undefined,
       images: imageFiles.length ? imageFiles.map(f => f.content) : undefined,
     };
 
     chat.messages.push(msg);
+    const sortKey = chat.messages.length;
     if (chat.messages.filter(m => m.role === 'user').length === 1) {
       chat.title = (text || files[0]?.name || 'New chat').slice(0, 50);
+      updateChatMeta(chat.id, { title: chat.title }).catch(console.error);
     }
 
-    persist(current, currentActive);
+    setChats([...current]);
+    addMessage(chat.id, msg, sortKey).catch(console.error);
     return chat;
-  }, [persist]);
+  }, []);
 
+  // ── Add assistant message ──
   const addAssistantMessage = useCallback((text) => {
-    const current = [...chatsRef.current];
+    const current = chatsRef.current;
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return;
-    chat.messages.push({ role: 'assistant', content: text });
-    persist(current, currentActive);
-  }, [persist]);
+    const msg = { role: 'assistant', content: text };
+    chat.messages.push(msg);
+    const sortKey = chat.messages.length;
+    setChats([...current]);
+    addMessage(chat.id, msg, sortKey).catch(console.error);
+  }, []);
 
+  // ── Append to last assistant message ──
   const appendToLastAssistant = useCallback((text) => {
-    const current = [...chatsRef.current];
+    const current = chatsRef.current;
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return;
     for (let i = chat.messages.length - 1; i >= 0; i--) {
       if (chat.messages[i].role === 'assistant') {
         chat.messages[i].content += text;
+        setChats([...current]);
+        // Update in DB: delete old message at this sortKey and re-create with full content
+        const sortKey = i + 1;
+        truncateMessages(chat.id, sortKey).then(() =>
+          addMessage(chat.id, chat.messages[i], sortKey)
+        ).catch(console.error);
         break;
       }
     }
-    persist(current, currentActive);
-  }, [persist]);
+  }, []);
 
   const getLastAssistantContent = useCallback(() => {
     const current = chatsRef.current;
@@ -146,46 +178,33 @@ export function useChat() {
     return '';
   }, []);
 
-  const editMessage = useCallback((idx) => {
-    const current = [...chatsRef.current];
-    const currentActive = activeIdRef.current;
-    const chat = current.find(c => c.id === currentActive);
-    if (!chat) return '';
-    const content = chat.messages[idx].content;
-    const removed = chat.messages.slice(idx);
-    const ids = collectFileIds(removed);
-    if (ids.length) deleteFiles(ids);
-    chat.messages = chat.messages.slice(0, idx);
-    persist(current, currentActive);
-    return content;
-  }, [persist]);
-
+  // ── Update (edit) a message and truncate everything after it ──
   const updateMessage = useCallback((idx, newContent) => {
-    const current = [...chatsRef.current];
+    const current = chatsRef.current;
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
     chat.messages[idx].content = newContent;
-    const removed = chat.messages.slice(idx + 1);
-    const ids = collectFileIds(removed);
-    if (ids.length) deleteFiles(ids);
     chat.messages = chat.messages.slice(0, idx + 1);
-    persist(current, currentActive);
+    setChats([...current]);
+    // Delete from idx onward in DB, then re-add the edited message
+    truncateMessages(chat.id, idx + 1).then(() =>
+      addMessage(chat.id, chat.messages[idx], idx + 1)
+    ).catch(console.error);
     return chat;
-  }, [persist]);
+  }, []);
 
+  // ── Regenerate from a given index ──
   const regenerate = useCallback((idx) => {
-    const current = [...chatsRef.current];
+    const current = chatsRef.current;
     const currentActive = activeIdRef.current;
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
-    const removed = chat.messages.slice(idx);
-    const ids = collectFileIds(removed);
-    if (ids.length) deleteFiles(ids);
     chat.messages = chat.messages.slice(0, idx);
-    persist(current, currentActive);
+    setChats([...current]);
+    truncateMessages(chat.id, idx + 1).catch(console.error);
     return chat;
-  }, [persist]);
+  }, []);
 
   const stopStreaming = useCallback(() => {
     if (abortRef.current) abortRef.current.abort();
@@ -196,7 +215,8 @@ export function useChat() {
     chats, activeChat, activeChatId, streaming, abortRef, ready,
     setStreaming, newChat, selectChat, deleteChat, deleteAllChats,
     ensureChat, addUserMessage, addAssistantMessage, appendToLastAssistant,
-    getLastAssistantContent, editMessage, updateMessage,
-    regenerate, stopStreaming, persist, chatsRef, activeIdRef,
+    getLastAssistantContent, updateMessage,
+    regenerate, stopStreaming, chatsRef, activeIdRef,
+    ensureMessages,
   };
 }
