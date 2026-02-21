@@ -2,8 +2,8 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { useChat } from './hooks/useChat';
 import { streamChat, getConfig } from './lib/stream';
 import { getUser, logout } from './lib/auth';
-import { loadUserSettings, saveUserSettings } from './lib/api';
-import { setCfgValue, getCfgValue } from './lib/storage';
+import { loadUserSettings } from './lib/api';
+import { updateSettings, getSettings } from './lib/settings';
 import Sidebar from './components/Sidebar';
 import Settings from './components/Settings';
 import ModelPicker from './components/ModelPicker';
@@ -60,23 +60,20 @@ function AuthedApp({ onLogout }) {
   useEffect(() => {
     loadUserSettings().then(s => {
       if (s) {
-        if (s.endpoint) setCfgValue('endpoint', s.endpoint);
-        if (s.apiKey) setCfgValue('apikey', s.apiKey);
-        if (s.systemPrompt) setCfgValue('system', s.systemPrompt);
-        if (s.maxTokens) setCfgValue('maxtokens', String(s.maxTokens));
-        if (s.temperature != null) setCfgValue('temp', String(s.temperature));
-        if (s.selectedModel) setCfgValue('model', s.selectedModel);
+        updateSettings({
+          endpoint: s.endpoint || '',
+          apiKey: s.apiKey || '',
+          systemPrompt: s.systemPrompt || '',
+          maxTokens: s.maxTokens || 4096,
+          temperature: s.temperature ?? 1,
+          selectedModel: s.selectedModel || '',
+        });
       }
-      // Open settings if no endpoint/apiKey configured (from DynamoDB or localStorage)
-      const ep = getCfgValue('endpoint');
-      const ak = getCfgValue('apikey');
-      if (!ep || !ak) setSettingsOpen(true);
+      const current = getSettings();
+      if (!current.endpoint || !current.apiKey) setSettingsOpen(true);
       setSettingsLoaded(true);
     }).catch(() => {
-      // Fallback to localStorage check
-      const ep = getCfgValue('endpoint');
-      const ak = getCfgValue('apikey');
-      if (!ep || !ak) setSettingsOpen(true);
+      setSettingsOpen(true);
       setSettingsLoaded(true);
     });
   }, []);

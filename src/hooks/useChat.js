@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { loadChatsRaw, loadChats, saveChats, deleteChatsFiles, deleteAllFiles, loadActiveChatId, getCfgValue } from '../lib/storage';
+import { loadChatsRaw, loadChats, saveChats, deleteChatsFiles, deleteAllFiles, loadActiveChatId } from '../lib/storage';
+import { getSetting } from '../lib/settings';
 import { deleteFiles } from '../lib/fileStore';
 
 // Collect fileIds from an array of messages
@@ -81,7 +82,7 @@ export function useChat() {
     const chat = current.find(c => c.id === currentActive);
     if (!chat) return null;
 
-    const system = getCfgValue('system');
+    const system = getSetting('systemPrompt');
     if (chat.messages.length === 0 && system) {
       chat.messages.push({ role: 'system', content: system });
     }

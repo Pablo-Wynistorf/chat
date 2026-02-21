@@ -85,6 +85,3 @@ export async function deleteAllFiles() {
 export function loadActiveChatId() {
   return localStorage.getItem(ACTIVE_KEY) || null;
 }
-
-export function getCfgValue(key) { return localStorage.getItem(`chat-${key}`) || ''; }
-export function setCfgValue(key, val) { localStorage.setItem(`chat-${key}`, val); }

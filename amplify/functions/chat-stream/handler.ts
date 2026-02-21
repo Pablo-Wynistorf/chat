@@ -1,5 +1,5 @@
 // Streaming Lambda handler — invoked via Function URL with RESPONSE_STREAM mode.
-// Uses the awslambda.streamifyResponse global provided by the Lambda runtime.
+// CORS is handled by the Function URL configuration, not in-code headers.
 
 declare const awslambda: {
   streamifyResponse: (handler: any) => any;
@@ -16,7 +16,7 @@ export const handler = awslambda.streamifyResponse(
     } catch {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 400,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
       errStream.write(JSON.stringify({ error: 'Invalid JSON body' }));
       errStream.end();
@@ -28,7 +28,7 @@ export const handler = awslambda.streamifyResponse(
     if (!endpoint || !apiKey) {
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 400,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
       errStream.write(JSON.stringify({ error: 'Missing endpoint or apiKey' }));
       errStream.end();
@@ -55,18 +55,16 @@ export const handler = awslambda.streamifyResponse(
         const errText = await apiRes.text();
         const errStream = awslambda.HttpResponseStream.from(responseStream, {
           statusCode: apiRes.status,
-          headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
         });
         errStream.write(errText);
         errStream.end();
         return;
       }
 
-      // Stream SSE data through to the client
       const outStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 200,
         headers: {
-          ...corsHeaders(),
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
@@ -87,18 +85,10 @@ export const handler = awslambda.streamifyResponse(
       console.error('Stream proxy error:', err);
       const errStream = awslambda.HttpResponseStream.from(responseStream, {
         statusCode: 500,
-        headers: { ...corsHeaders(), 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
       });
       errStream.write(JSON.stringify({ error: err.message || 'Internal error' }));
       errStream.end();
     }
   }
 );
-
-function corsHeaders() {
-  return {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type,Authorization',
-    'Access-Control-Allow-Methods': 'POST,OPTIONS',
-  };
-}

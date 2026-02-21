@@ -1,14 +1,15 @@
-import { getCfgValue } from './storage';
+import { getSettings } from './settings';
 import { streamChatViaLambda, fetchModelsViaLambda } from './api';
 
 export function getConfig() {
+  const s = getSettings();
   return {
-    endpoint: (getCfgValue('endpoint') || '').replace(/\/$/, ''),
-    apiKey: getCfgValue('apikey') || '',
-    model: getCfgValue('model') || '',
-    system: getCfgValue('system') || '',
-    maxTokens: Math.min(parseInt(getCfgValue('maxtokens')) || 4096, 65536),
-    temperature: parseFloat(getCfgValue('temp') || '1'),
+    endpoint: (s.endpoint || '').replace(/\/$/, ''),
+    apiKey: s.apiKey || '',
+    model: s.selectedModel || '',
+    system: s.systemPrompt || '',
+    maxTokens: Math.min(s.maxTokens || 4096, 65536),
+    temperature: s.temperature ?? 1,
   };
 }
 

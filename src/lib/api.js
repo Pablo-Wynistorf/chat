@@ -19,7 +19,6 @@ export function getDataClient() {
 // ── Save user settings to DynamoDB ──
 export async function saveUserSettings(settings) {
   const client = getDataClient();
-  // Try to get existing settings first
   const { data: existing } = await client.models.UserSettings.list();
   if (existing && existing.length > 0) {
     return client.models.UserSettings.update({
@@ -60,9 +59,13 @@ export async function streamChatViaLambda(
   onDelta,
   onDone,
 ) {
+  const token = await getIdToken();
   const res = await fetch(_streamUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
     body: JSON.stringify({
       endpoint,
       apiKey,
