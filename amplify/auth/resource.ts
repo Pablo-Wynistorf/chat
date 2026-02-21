@@ -19,13 +19,11 @@ export const auth = defineAuth({
       callbackUrls: [
         'http://localhost:5173/',
         'https://localhost:5173/',
-        'https://main.d309k0500i2i75.amplifyapp.com/',
         'https://chat.onedns.ch/',
       ],
       logoutUrls: [
         'http://localhost:5173/',
         'https://localhost:5173/',
-        'https://main.d309k0500i2i75.amplifyapp.com/',
         'https://chat.onedns.ch/',
       ],
     },
