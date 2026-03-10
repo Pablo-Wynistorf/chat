@@ -212,11 +212,11 @@ export default function InputBar({ onSend, onStop, streaming, centered, messages
   );
 
   // Centered mode: use flex-1 to fill the message area, push input to vertical center
-  // When keyboard is open on mobile, dock to bottom of visible viewport
+  // Offset upward by half the header height (h-12 = 3rem → 1.5rem) for true visual center
   if (centered) {
     return (
       <div ref={barRef} className={`flex-1 flex flex-col items-center px-3 py-3 sm:p-4 min-h-0 ${keyboardOpen ? '' : 'justify-center'}`}
-        style={keyboardOpen ? { background: 'rgba(12,12,14,0.85)', backdropFilter: 'blur(16px)', padding: '8px 12px', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' } : { marginBottom: '3rem' }}>
+        style={keyboardOpen ? { background: 'rgba(12,12,14,0.85)', backdropFilter: 'blur(16px)', padding: '8px 12px', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' } : { paddingBottom: 'calc(1.5rem + 3rem)' }}>
         <div className="max-w-[740px] w-full">
           {fileAttachments}
           {inputBar}
