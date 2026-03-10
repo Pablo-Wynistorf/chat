@@ -83,12 +83,12 @@ export default function Settings({ open, onClose, onDeleteAll, onLogout }) {
           </button>
         </div>
 
-        <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto">
+        <div className="flex gap-1 px-4 pt-3 pb-1 overflow-x-auto scrollbar-none">
           {tabs.map(t => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 ${
+              className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-2 sm:py-1.5 rounded-lg text-xs font-medium transition cursor-pointer shrink-0 ${
                 activeTab === t.id ? 'text-zinc-100' : 'text-zinc-500 hover:text-zinc-300'
               }`}
               style={{
@@ -97,7 +97,7 @@ export default function Settings({ open, onClose, onDeleteAll, onLogout }) {
               }}
             >
               {t.icon}
-              <span className="hidden sm:inline">{t.label}</span>
+              <span>{t.label}</span>
             </button>
           ))}
         </div>
@@ -300,6 +300,7 @@ function InfoRow({ label, value, mono }) {
 
 function McpTab({ mcpServers, setMcpServers, save, inputStyle }) {
   const [adding, setAdding] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [newName, setNewName] = useState('');
   const [newUrl, setNewUrl] = useState('');
   const [newHeaderKey, setNewHeaderKey] = useState('');
@@ -307,19 +308,43 @@ function McpTab({ mcpServers, setMcpServers, save, inputStyle }) {
   const [newHeaders, setNewHeaders] = useState({});
   const [showAuth, setShowAuth] = useState(false);
 
-  const addServer = () => {
+  const resetForm = () => {
+    setNewName(''); setNewUrl(''); setNewHeaders({}); setNewHeaderKey(''); setNewHeaderVal('');
+    setShowAuth(false); setAdding(false); setEditId(null);
+  };
+
+  const saveServer = () => {
     if (!newUrl.trim()) return;
-    const server = {
-      id: crypto.randomUUID(),
-      name: newName.trim() || new URL(newUrl.trim()).hostname,
-      url: newUrl.trim(),
-      headers: Object.keys(newHeaders).length > 0 ? { ...newHeaders } : {},
-      enabled: true,
-    };
-    const updated = [...mcpServers, server];
+    let updated;
+    if (editId) {
+      updated = mcpServers.map(s => s.id === editId ? {
+        ...s,
+        name: newName.trim() || (() => { try { return new URL(newUrl.trim()).hostname; } catch { return 'Server'; } })(),
+        url: newUrl.trim(),
+        headers: Object.keys(newHeaders).length > 0 ? { ...newHeaders } : {},
+      } : s);
+    } else {
+      const server = {
+        id: crypto.randomUUID(),
+        name: newName.trim() || (() => { try { return new URL(newUrl.trim()).hostname; } catch { return 'Server'; } })(),
+        url: newUrl.trim(),
+        headers: Object.keys(newHeaders).length > 0 ? { ...newHeaders } : {},
+        enabled: true,
+      };
+      updated = [...mcpServers, server];
+    }
     setMcpServers(updated);
     save({ mcpServers: updated });
-    setNewName(''); setNewUrl(''); setNewHeaders({}); setNewHeaderKey(''); setNewHeaderVal(''); setShowAuth(false); setAdding(false);
+    resetForm();
+  };
+
+  const startEdit = (s) => {
+    setEditId(s.id);
+    setNewName(s.name);
+    setNewUrl(s.url);
+    setNewHeaders(s.headers ? { ...s.headers } : {});
+    setShowAuth(s.headers && Object.keys(s.headers).length > 0);
+    setAdding(true);
   };
 
   const addHeader = () => {
@@ -361,8 +386,15 @@ function McpTab({ mcpServers, setMcpServers, save, inputStyle }) {
             <div className="min-w-0 flex-1">
               <div className="text-sm text-zinc-200 truncate">{s.name}</div>
               <div className="text-[11px] text-zinc-600 truncate font-mono">{s.url}</div>
+              {s.headers && Object.keys(s.headers).length > 0 && (
+                <div className="text-[10px] text-zinc-600 mt-0.5">{Object.keys(s.headers).length} header{Object.keys(s.headers).length !== 1 ? 's' : ''}</div>
+              )}
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button onClick={() => startEdit(s)}
+                className="text-zinc-600 hover:text-zinc-300 transition cursor-pointer p-1">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+              </button>
               <button onClick={() => toggleServer(s.id)}
                 className={`w-9 h-5 rounded-full transition cursor-pointer relative ${s.enabled ? 'bg-accent' : 'bg-zinc-700'}`}>
                 <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${s.enabled ? 'left-[18px]' : 'left-0.5'}`} />
@@ -378,33 +410,33 @@ function McpTab({ mcpServers, setMcpServers, save, inputStyle }) {
         <div className="rounded-xl p-3 space-y-2.5" style={{ background: 'rgba(124,92,252,0.04)', border: '1px solid rgba(124,92,252,0.15)' }}>
           <Field label="Server Name"><input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. My Tools" className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50" style={inputStyle} /></Field>
           <Field label="Server URL"><input value={newUrl} onChange={e => setNewUrl(e.target.value)} placeholder="https://mcp.example.com/mcp" className="w-full rounded-lg px-3 py-2 text-sm outline-none transition placeholder:text-zinc-700 text-zinc-200 focus:ring-1 focus:ring-accent/50" style={inputStyle} /></Field>
-          <button onClick={() => setShowAuth(!showAuth)} className="text-[11px] text-zinc-500 hover:text-zinc-300 transition cursor-pointer flex items-center gap-1">
+          <button onClick={() => setShowAuth(!showAuth)} className="text-[11px] text-zinc-500 hover:text-zinc-300 transition cursor-pointer flex items-center gap-1 py-1">
             <svg className={`w-3 h-3 transition-transform ${showAuth ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" d="M9 5l7 7-7 7" /></svg>
-            Auth Headers (optional)
+            Auth Headers {editId ? '' : '(optional)'}
           </button>
           {showAuth && (
-            <div className="space-y-2 pl-2">
+            <div className="space-y-2 pl-1 sm:pl-2">
               {Object.entries(newHeaders).map(([k, v]) => (
                 <div key={k} className="flex items-center gap-2 text-xs">
-                  <span className="text-zinc-400 font-mono truncate">{k}:</span>
-                  <span className="text-zinc-600 font-mono truncate flex-1">{v.slice(0, 20)}...</span>
-                  <button onClick={() => removeHeader(k)} className="text-zinc-600 hover:text-red-400 cursor-pointer text-[10px]">✕</button>
+                  <span className="text-zinc-400 font-mono truncate max-w-[40%]">{k}:</span>
+                  <span className="text-zinc-600 font-mono truncate flex-1">{v.length > 20 ? v.slice(0, 20) + '...' : v}</span>
+                  <button onClick={() => removeHeader(k)} className="text-zinc-600 hover:text-red-400 cursor-pointer text-sm p-1 shrink-0">✕</button>
                 </div>
               ))}
-              <div className="flex gap-2">
-                <input value={newHeaderKey} onChange={e => setNewHeaderKey(e.target.value)} placeholder="Header name" className="flex-1 rounded-lg px-2 py-1.5 text-xs outline-none text-zinc-200 placeholder:text-zinc-700 focus:ring-1 focus:ring-accent/50" style={inputStyle} />
-                <input value={newHeaderVal} onChange={e => setNewHeaderVal(e.target.value)} placeholder="Value" type="password" className="flex-1 rounded-lg px-2 py-1.5 text-xs outline-none text-zinc-200 placeholder:text-zinc-700 focus:ring-1 focus:ring-accent/50" style={inputStyle} />
-                <button onClick={addHeader} className="text-xs text-accent hover:text-accent-hover cursor-pointer px-2 py-1 rounded-lg shrink-0" style={{ background: 'rgba(124,92,252,0.1)' }}>Add</button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <input value={newHeaderKey} onChange={e => setNewHeaderKey(e.target.value)} placeholder="Header name" className="w-full sm:flex-1 rounded-lg px-2 py-2 sm:py-1.5 text-xs outline-none text-zinc-200 placeholder:text-zinc-700 focus:ring-1 focus:ring-accent/50" style={inputStyle} />
+                <input value={newHeaderVal} onChange={e => setNewHeaderVal(e.target.value)} placeholder="Value" type="password" className="w-full sm:flex-1 rounded-lg px-2 py-2 sm:py-1.5 text-xs outline-none text-zinc-200 placeholder:text-zinc-700 focus:ring-1 focus:ring-accent/50" style={inputStyle} />
+                <button onClick={addHeader} className="text-xs text-accent hover:text-accent-hover cursor-pointer px-3 py-2 sm:py-1 rounded-lg shrink-0 w-full sm:w-auto" style={{ background: 'rgba(124,92,252,0.1)', border: '1px solid rgba(124,92,252,0.2)' }}>Add Header</button>
               </div>
             </div>
           )}
           <div className="flex gap-2 pt-1">
-            <button onClick={() => { setAdding(false); setNewName(''); setNewUrl(''); setNewHeaders({}); setShowAuth(false); }}
-              className="flex-1 py-2 rounded-xl text-xs text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
+            <button onClick={resetForm}
+              className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs text-zinc-500 hover:text-zinc-300 transition cursor-pointer"
               style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)' }}>Cancel</button>
-            <button onClick={addServer}
-              className="flex-1 py-2 rounded-xl text-xs text-white transition cursor-pointer"
-              style={{ background: 'rgba(124,92,252,0.8)', border: '1px solid rgba(124,92,252,0.4)' }}>Add Server</button>
+            <button onClick={saveServer}
+              className="flex-1 py-2.5 sm:py-2 rounded-xl text-xs text-white transition cursor-pointer"
+              style={{ background: 'rgba(124,92,252,0.8)', border: '1px solid rgba(124,92,252,0.4)' }}>{editId ? 'Save Changes' : 'Add Server'}</button>
           </div>
         </div>
       )}
@@ -444,25 +476,25 @@ function DangerTab({ onDeleteAll, onLogout }) {
   return (
     <div className="space-y-4">
       <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.04)', border: '1px solid rgba(220,38,38,0.1)' }}>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="text-sm font-medium text-zinc-300">Delete all chats</div>
             <div className="text-xs text-zinc-600 mt-0.5">Permanently remove all conversations</div>
           </div>
           <button onClick={onDeleteAll}
-            className="px-4 py-2 rounded-xl text-sm text-red-400 hover:text-red-300 transition font-medium cursor-pointer"
+            className="px-4 py-2.5 sm:py-2 rounded-xl text-sm text-red-400 hover:text-red-300 transition font-medium cursor-pointer w-full sm:w-auto"
             style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}>Delete All</button>
         </div>
       </div>
       {onLogout && (
         <div className="rounded-xl p-4" style={{ background: 'rgba(220,38,38,0.04)', border: '1px solid rgba(220,38,38,0.1)' }}>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="text-sm font-medium text-zinc-300">Sign out</div>
               <div className="text-xs text-zinc-600 mt-0.5">End your current session</div>
             </div>
             <button onClick={onLogout}
-              className="px-4 py-2 rounded-xl text-sm text-red-400 hover:text-red-300 transition font-medium cursor-pointer"
+              className="px-4 py-2.5 sm:py-2 rounded-xl text-sm text-red-400 hover:text-red-300 transition font-medium cursor-pointer w-full sm:w-auto"
               style={{ background: 'rgba(220,38,38,0.08)', border: '1px solid rgba(220,38,38,0.15)' }}>Sign Out</button>
           </div>
         </div>
@@ -472,16 +504,24 @@ function DangerTab({ onDeleteAll, onLogout }) {
 }
 
 function Field({ label, tip, children }) {
+  const [showTip, setShowTip] = useState(false);
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5 text-sm font-medium text-zinc-300">
         {label}
         {tip && (
-          <span className="relative inline-flex group">
-            <span className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full text-zinc-600 text-[9px] cursor-default"
-              style={{ background: 'rgba(255,255,255,0.06)' }}>?</span>
-            <span className="hidden group-hover:block absolute left-1/2 top-full mt-1.5 -translate-x-1/2 text-zinc-400 text-[11.5px] leading-relaxed p-2 rounded-lg w-[220px] z-50 shadow-lg shadow-black/50 pointer-events-none"
-              style={{ background: 'rgba(16,16,20,0.9)', border: '1px solid rgba(255,255,255,0.08)' }}>{tip}</span>
+          <span className="relative inline-flex">
+            <span
+              className="inline-flex items-center justify-center w-[15px] h-[15px] rounded-full text-zinc-600 text-[9px] cursor-pointer select-none"
+              style={{ background: 'rgba(255,255,255,0.06)' }}
+              onClick={() => setShowTip(!showTip)}
+              onMouseEnter={() => setShowTip(true)}
+              onMouseLeave={() => setShowTip(false)}
+            >?</span>
+            {showTip && (
+              <span className="absolute left-1/2 top-full mt-1.5 -translate-x-1/2 text-zinc-400 text-[11.5px] leading-relaxed p-2 rounded-lg w-[200px] sm:w-[220px] z-50 shadow-lg shadow-black/50"
+                style={{ background: 'rgba(16,16,20,0.95)', border: '1px solid rgba(255,255,255,0.08)' }}>{tip}</span>
+            )}
           </span>
         )}
       </div>

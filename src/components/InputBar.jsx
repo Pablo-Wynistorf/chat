@@ -45,20 +45,37 @@ export default function InputBar({ onSend, onStop, streaming, centered, messages
   }, [centered, streaming]);
 
   // Handle mobile virtual keyboard
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
     const onResize = () => {
       const keyboardOffset = window.innerHeight - vv.height;
+      const isOpen = keyboardOffset > 50;
+      setKeyboardOpen(isOpen);
       if (barRef.current) {
-        barRef.current.style.paddingBottom = keyboardOffset > 50 ? `${keyboardOffset}px` : '';
-      }
-      if (keyboardOffset > 50) {
-        requestAnimationFrame(() => textareaRef.current?.scrollIntoView({ block: 'nearest' }));
+        if (isOpen) {
+          // Position the bar at the bottom of the visible viewport
+          barRef.current.style.position = 'fixed';
+          barRef.current.style.bottom = `${window.innerHeight - vv.height - vv.offsetTop}px`;
+          barRef.current.style.left = '0';
+          barRef.current.style.right = '0';
+          barRef.current.style.zIndex = '50';
+        } else {
+          barRef.current.style.position = '';
+          barRef.current.style.bottom = '';
+          barRef.current.style.left = '';
+          barRef.current.style.right = '';
+          barRef.current.style.zIndex = '';
+        }
       }
     };
     vv.addEventListener('resize', onResize);
-    return () => vv.removeEventListener('resize', onResize);
+    vv.addEventListener('scroll', onResize);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      vv.removeEventListener('scroll', onResize);
+    };
   }, []);
 
   const compressImage = (dataUrl, maxDim = 1024, quality = 0.7) => {
@@ -195,14 +212,15 @@ export default function InputBar({ onSend, onStop, streaming, centered, messages
   );
 
   // Centered mode: use flex-1 to fill the message area, push input to vertical center
-  // This avoids absolute positioning that covers the header
+  // When keyboard is open on mobile, dock to bottom of visible viewport
   if (centered) {
     return (
-      <div ref={barRef} className="flex-1 flex flex-col justify-center px-3 py-3 sm:p-4 min-h-0">
-        <div className="max-w-[740px] mx-auto w-full">
+      <div ref={barRef} className={`flex-1 flex flex-col items-center px-3 py-3 sm:p-4 min-h-0 ${keyboardOpen ? '' : 'justify-center'}`}
+        style={keyboardOpen ? { background: 'rgba(12,12,14,0.85)', backdropFilter: 'blur(16px)', padding: '8px 12px', paddingBottom: 'max(8px, env(safe-area-inset-bottom))' } : { marginBottom: '3rem' }}>
+        <div className="max-w-[740px] w-full">
           {fileAttachments}
           {inputBar}
-          {tokenDisplay}
+          {!keyboardOpen && tokenDisplay}
         </div>
       </div>
     );
@@ -213,13 +231,13 @@ export default function InputBar({ onSend, onStop, streaming, centered, messages
     <div
       ref={barRef}
       className="shrink-0 relative z-10"
-      style={{ background: 'rgba(12,12,14,0.6)', backdropFilter: 'blur(16px)' }}
+      style={{ background: 'rgba(12,12,14,0.85)', backdropFilter: 'blur(16px)' }}
     >
       <div className="px-3 py-2 sm:p-4 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
         <div className="max-w-[740px] mx-auto">
           {fileAttachments}
           {inputBar}
-          {tokenDisplay}
+          {!keyboardOpen && tokenDisplay}
         </div>
       </div>
     </div>
